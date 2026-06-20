@@ -575,7 +575,7 @@ static void drawDecoders(App& app)
     ImGui::Begin("Decoders");
 
     auto decs = app.decoders.status();
-    ImGui::Text("%d active", (int)decs.size());
+    ImGui::Text("%d active on %d threads", (int)decs.size(), app.decoders.workerCount());
     ImGui::SameLine();
     if (ImGui::SmallButton("Remove all"))
         app.decoders.removeAll();
