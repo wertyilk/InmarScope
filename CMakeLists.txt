@@ -64,21 +64,53 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# JAERO DSP (MSK/OQPSK demodulators + AeroL framing), Qt-stripped, plus the
+# vendored libcorrect FEC. Built as a static lib with a plain C API.
+# ---------------------------------------------------------------------------
+set(JDSP ${CMAKE_SOURCE_DIR}/third_party/jaero_dsp)
+file(GLOB LIBCORRECT_SOURCES
+    ${JDSP}/libcorrect/src/convolutional/*.c
+    ${JDSP}/libcorrect/src/reed-solomon/*.c
+    ${JDSP}/libcorrect/src/fec_shim.c)
+
+add_library(jaero_dsp STATIC
+    ${JDSP}/DSP.cpp
+    ${JDSP}/mskdemodulator.cpp
+    ${JDSP}/oqpskdemodulator.cpp
+    ${JDSP}/burstmskdemodulator.cpp
+    ${JDSP}/burstoqpskdemodulator.cpp
+    ${JDSP}/coarsefreqestimate.cpp
+    ${JDSP}/fftwrapper.cpp
+    ${JDSP}/fftrwrapper.cpp
+    ${JDSP}/jfft.cpp
+    ${JDSP}/jconvolutionalcodec.cpp
+    ${JDSP}/aerol.cpp
+    ${JDSP}/jaero_demod.cpp
+    ${LIBCORRECT_SOURCES}
+)
+target_include_directories(jaero_dsp PUBLIC
+    ${JDSP}
+    ${JDSP}/libcorrect/include
+)
+target_compile_definitions(jaero_dsp PUBLIC _USE_MATH_DEFINES)
+
+# ---------------------------------------------------------------------------
 # FrameSync application
 # ---------------------------------------------------------------------------
 add_executable(FrameSync
     src/main.cpp
-    src/dsp/jfft.cpp
     src/sdr/rtl_sdr_source.cpp
     src/sdr/wav_file_source.cpp
     src/gui/waterfall.cpp
+    src/decode/decoder.cpp
+    src/decode/decoder_manager.cpp
 )
 target_include_directories(FrameSync PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${RTLSDR_INCLUDE_DIRS}
 )
 target_compile_definitions(FrameSync PRIVATE _USE_MATH_DEFINES)
-target_link_libraries(FrameSync PRIVATE imgui ${RTLSDR_LIBRARIES})
+target_link_libraries(FrameSync PRIVATE imgui jaero_dsp ${RTLSDR_LIBRARIES})
 target_link_directories(FrameSync PRIVATE ${RTLSDR_LIBRARY_DIRS})
 
 if(WIN32)

@@ -13,6 +13,7 @@
 #include "dsp/jfft.h"
 #include "sdr/rtl_sdr_source.h"
 #include "sdr/wav_file_source.h"
+#include "decode/decoder_manager.h"
 #include "gui/waterfall.h"
 
 #include <algorithm>
@@ -69,6 +70,8 @@ struct App
     IqRing ring{1u << 21};
     JFFT fft;
     Waterfall waterfall;
+    DecoderManager decoders;
+    int newBaud = 1; // 0 = 600, 1 = 1200 (baud for click-added decoders)
 
     // Device list.
     std::vector<SdrDeviceInfo> devices;
@@ -237,7 +240,11 @@ static void startActive(App& app)
     app.resetView = true;
 
     IqRing* ring = &app.ring;
-    auto cb = [ring](const float* iq, int n) { ring->push(iq, (size_t)n); };
+    DecoderManager* mgr = &app.decoders;
+    auto cb = [ring, mgr](const float* iq, int n) {
+        ring->push(iq, (size_t)n);
+        mgr->feed(iq, n);
+    };
     std::string err;
     bool ok = false;
 
@@ -259,6 +266,13 @@ static void startActive(App& app)
         app.wav.setLoop(app.wavLoop);
         app.wav.setCenterFreq(app.centerFreqMHz * 1e6);
         ok = app.wav.start(0, cb, err);
+    }
+
+    if (ok)
+    {
+        app.decoders.removeAll();
+        app.decoders.configure(app.active->sampleRate(), app.active->centerFreq());
+        app.decoders.start();
     }
 
     app.status = ok ? "Running" : ("Error: " + err);
@@ -290,6 +304,8 @@ static void drawControls(App& app)
         if (ImGui::Button("Stop", ImVec2(120, 0)))
         {
             app.active->stop();
+            app.decoders.stop();
+            app.decoders.removeAll();
             app.status = "Idle";
         }
     }
@@ -407,6 +423,11 @@ static void drawControls(App& app)
     ImGui::SameLine();
     ImGui::TextDisabled("drag=pan  scroll=zoom  dbl-click=fit");
 
+    ImGui::Separator();
+    const char* bauds[] = {"600", "1200"};
+    ImGui::Combo("Decode baud", &app.newBaud, bauds, 2);
+    ImGui::TextDisabled("Ctrl+click the spectrum to add a decoder there");
+
     if (running)
     {
         ImGui::Separator();
@@ -466,6 +487,25 @@ static void drawSpectrum(App& app)
         if (app.curN > 0)
             ImPlot::PlotLine("PSD", app.freqMHz.data(), app.avg.data(), app.curN);
 
+        // Vertical markers at each active decoder's frequency.
+        auto decs = app.decoders.status();
+        {
+            ImVec2 pp = ImPlot::GetPlotPos();
+            ImVec2 ps = ImPlot::GetPlotSize();
+            ImDrawList* dl = ImPlot::GetPlotDrawList();
+            ImPlot::PushPlotClipRect();
+            for (auto& d : decs)
+            {
+                ImVec2 px = ImPlot::PlotToPixels(ImPlotPoint(d.freqMHz, 0.0));
+                if (px.x < pp.x || px.x > pp.x + ps.x)
+                    continue;
+                ImU32 col = d.locked ? IM_COL32(50, 255, 90, 220)
+                                     : IM_COL32(230, 180, 50, 220);
+                dl->AddLine(ImVec2(px.x, pp.y), ImVec2(px.x, pp.y + ps.y), col, 1.5f);
+            }
+            ImPlot::PopPlotClipRect();
+        }
+
         ImPlotRect lim = ImPlot::GetPlotLimits();
         app.viewXminMHz = lim.X.Min;
         app.viewXmaxMHz = lim.X.Max;
@@ -480,6 +520,15 @@ static void drawSpectrum(App& app)
         // Only clear the reset request once a real band has actually been fit.
         if (bandValid)
             app.resetView = false;
+
+        // Ctrl+left-click adds a decoder at the clicked frequency.
+        if (ImPlot::IsPlotHovered() && ImGui::GetIO().KeyCtrl &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            ImPlotPoint mp = ImPlot::GetPlotMousePos();
+            int baud = (app.newBaud == 0) ? 600 : 1200;
+            app.decoders.addDecoder(mp.x * 1e6, baud);
+        }
 
         ImPlot::EndPlot();
     }
@@ -520,6 +569,98 @@ static void drawWaterfall(App& app)
     ImGui::End();
 }
 
+static void drawDecoders(App& app)
+{
+    ImGui::Begin("Decoders");
+
+    auto decs = app.decoders.status();
+    ImGui::Text("%d active", (int)decs.size());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Remove all"))
+        app.decoders.removeAll();
+    ImGui::Separator();
+
+    if (ImGui::BeginTable("##decs", 6,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+    {
+        ImGui::TableSetupColumn("Lock", ImGuiTableColumnFlags_WidthFixed, 36);
+        ImGui::TableSetupColumn("Freq MHz");
+        ImGui::TableSetupColumn("Baud");
+        ImGui::TableSetupColumn("Eb/N0");
+        ImGui::TableSetupColumn("Msgs");
+        ImGui::TableSetupColumn("");
+        ImGui::TableHeadersRow();
+
+        int toRemove = -1;
+        for (auto& d : decs)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImVec4 c = d.locked ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f)
+                                : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+            ImGui::TextColored(c, "%s", d.locked ? "LOCK" : "--");
+            ImGui::TableNextColumn();
+            ImGui::Text("%.4f", d.freqMHz);
+            ImGui::TableNextColumn();
+            ImGui::Text("%d", d.baud);
+            ImGui::TableNextColumn();
+            ImGui::Text("%.1f", d.ebno);
+            ImGui::TableNextColumn();
+            ImGui::Text("%llu", (unsigned long long)d.msgs);
+            ImGui::TableNextColumn();
+            char btn[24];
+            std::snprintf(btn, sizeof(btn), "X##%d", d.channelId);
+            if (ImGui::SmallButton(btn))
+                toRemove = d.channelId;
+        }
+        ImGui::EndTable();
+        if (toRemove >= 0)
+            app.decoders.removeDecoder(toRemove);
+    }
+
+    ImGui::End();
+}
+
+static void drawMessages(App& app)
+{
+    ImGui::Begin("Messages");
+
+    ImGui::Text("%llu total", (unsigned long long)app.decoders.log().count());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear"))
+        app.decoders.log().clear();
+    ImGui::Separator();
+
+    auto msgs = app.decoders.log().snapshot();
+    if (ImGui::BeginTable("##msgs", 4,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                          ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable))
+    {
+        ImGui::TableSetupColumn("Freq", ImGuiTableColumnFlags_WidthFixed, 70);
+        ImGui::TableSetupColumn("Dir", ImGuiTableColumnFlags_WidthFixed, 36);
+        ImGui::TableSetupColumn("AES", ImGuiTableColumnFlags_WidthFixed, 70);
+        ImGui::TableSetupColumn("Text");
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableHeadersRow();
+
+        for (auto it = msgs.rbegin(); it != msgs.rend(); ++it)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%.3f", it->freqMHz);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(it->downlink ? "DL" : "UL");
+            ImGui::TableNextColumn();
+            ImGui::Text("%06X", it->aesId);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(it->text.c_str());
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::End();
+}
+
 // Full-screen host window holding a locked dockspace. Builds a default
 // layout on first run (Control left, Spectrum top-right, Waterfall
 // bottom-right). Panels can't be undocked or closed; "View > Reset Layout"
@@ -555,13 +696,16 @@ static void drawDockHost()
         ImGui::DockBuilderAddNode(dockId, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(dockId, vp->WorkSize);
 
-        ImGuiID left, right, rtop, rbot;
+        ImGuiID left, right, rtop, rbot, ctrl, dec;
         ImGui::DockBuilderSplitNode(dockId, ImGuiDir_Left, 0.26f, &left, &right);
+        ImGui::DockBuilderSplitNode(left, ImGuiDir_Up, 0.62f, &ctrl, &dec);
         ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.5f, &rtop, &rbot);
 
-        ImGui::DockBuilderDockWindow("Control", left);
+        ImGui::DockBuilderDockWindow("Control", ctrl);
+        ImGui::DockBuilderDockWindow("Decoders", dec);
         ImGui::DockBuilderDockWindow("Spectrum", rtop);
         ImGui::DockBuilderDockWindow("Waterfall", rbot);
+        ImGui::DockBuilderDockWindow("Messages", rbot);
         ImGui::DockBuilderFinish(dockId);
     }
 
@@ -631,6 +775,8 @@ int main(int, char**)
         drawControls(app);
         drawSpectrum(app);
         drawWaterfall(app);
+        drawDecoders(app);
+        drawMessages(app);
 
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -644,6 +790,7 @@ int main(int, char**)
         glfwSwapBuffers(window);
     }
 
+    app.decoders.stop();
     app.sdr.stop();
     app.wav.stop();
 
