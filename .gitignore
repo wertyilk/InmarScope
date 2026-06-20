@@ -1,0 +1,7 @@
+/build/
+/reference/
+*.o
+*.obj
+*.exe
+*.ini
+imgui.ini

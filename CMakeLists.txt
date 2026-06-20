@@ -1,0 +1,108 @@
+cmake_minimum_required(VERSION 3.16)
+project(FrameSync C CXX)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "" FORCE)
+endif()
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+find_package(OpenGL REQUIRED)
+find_package(PkgConfig)
+
+find_package(glfw3 CONFIG QUIET)
+if(NOT glfw3_FOUND)
+    if(NOT PkgConfig_FOUND)
+        find_package(PkgConfig REQUIRED)
+    endif()
+    pkg_check_modules(GLFW REQUIRED glfw3)
+endif()
+
+# RTL-SDR
+if(PkgConfig_FOUND)
+    pkg_check_modules(RTLSDR QUIET librtlsdr)
+endif()
+if(NOT RTLSDR_FOUND)
+    find_library(RTLSDR_LIBRARIES NAMES rtlsdr librtlsdr REQUIRED)
+    find_path(RTLSDR_INCLUDE_DIRS NAMES rtl-sdr.h REQUIRED)
+endif()
+
+set(IMGUI_DIR   ${CMAKE_SOURCE_DIR}/third_party/imgui)
+set(IMPLOT_DIR  ${CMAKE_SOURCE_DIR}/third_party/implot)
+
+# ---------------------------------------------------------------------------
+# Dear ImGui + ImPlot (vendored) compiled as a static lib
+# ---------------------------------------------------------------------------
+add_library(imgui STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    ${IMPLOT_DIR}/implot.cpp
+    ${IMPLOT_DIR}/implot_items.cpp
+)
+target_include_directories(imgui PUBLIC
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+    ${IMPLOT_DIR}
+)
+target_link_libraries(imgui PUBLIC OpenGL::GL)
+if(glfw3_FOUND)
+    target_link_libraries(imgui PUBLIC glfw)
+else()
+    target_include_directories(imgui PUBLIC ${GLFW_INCLUDE_DIRS})
+    target_link_libraries(imgui PUBLIC ${GLFW_LIBRARIES})
+    target_link_directories(imgui PUBLIC ${GLFW_LIBRARY_DIRS})
+endif()
+
+# ---------------------------------------------------------------------------
+# FrameSync application
+# ---------------------------------------------------------------------------
+add_executable(FrameSync
+    src/main.cpp
+    src/dsp/jfft.cpp
+    src/sdr/rtl_sdr_source.cpp
+    src/sdr/wav_file_source.cpp
+    src/gui/waterfall.cpp
+)
+target_include_directories(FrameSync PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${RTLSDR_INCLUDE_DIRS}
+)
+target_compile_definitions(FrameSync PRIVATE _USE_MATH_DEFINES)
+target_link_libraries(FrameSync PRIVATE imgui ${RTLSDR_LIBRARIES})
+target_link_directories(FrameSync PRIVATE ${RTLSDR_LIBRARY_DIRS})
+
+if(WIN32)
+    target_link_libraries(FrameSync PRIVATE opengl32 gdi32 comdlg32)
+
+    # Copy MinGW runtime DLLs next to the executable so it runs standalone
+    # (PyCharm, double-click) without the MSYS2 bin dir on PATH.
+    get_filename_component(MINGW_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(FRAMESYNC_RUNTIME_DLLS
+        libgcc_s_seh-1.dll
+        libwinpthread-1.dll
+        libstdc++-6.dll
+        glfw3.dll
+        librtlsdr.dll
+        libusb-1.0.dll
+    )
+    foreach(dll ${FRAMESYNC_RUNTIME_DLLS})
+        if(EXISTS "${MINGW_BIN}/${dll}")
+            add_custom_command(TARGET FrameSync POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${MINGW_BIN}/${dll}" "$<TARGET_FILE_DIR:FrameSync>"
+                COMMENT "Copying ${dll}")
+        else()
+            message(WARNING "Runtime DLL not found: ${MINGW_BIN}/${dll}")
+        endif()
+    endforeach()
+endif()
