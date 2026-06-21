@@ -114,6 +114,14 @@ add_library(mbelib STATIC ${MBELIB_SOURCES})
 target_include_directories(mbelib PUBLIC ${CMAKE_SOURCE_DIR}/third_party/mbelib)
 
 # ---------------------------------------------------------------------------
+# libacars (vendored): decodes the ACARS application layer (CPDLC, ADS-C,
+# MIAM, media-advisory). Built via its own CMake as the acars_static target.
+# Examples are skipped (LA_BUILD_EXAMPLES off).
+# ---------------------------------------------------------------------------
+set(LA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/libacars ${CMAKE_BINARY_DIR}/libacars EXCLUDE_FROM_ALL)
+
+# ---------------------------------------------------------------------------
 # InmarScope application
 # ---------------------------------------------------------------------------
 add_executable(InmarScope
@@ -125,6 +133,7 @@ add_executable(InmarScope
     src/gui/waterfall.cpp
     src/decode/decoder.cpp
     src/decode/decoder_manager.cpp
+    src/decode/acars_apps.cpp
     src/decode/egc/egc_decoder.cpp
     src/voice/ambe_decoder.cpp
     src/voice/wav_writer.cpp
@@ -136,12 +145,14 @@ target_include_directories(InmarScope PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/third_party/mbelib
     ${CMAKE_SOURCE_DIR}/third_party/miniaudio
+    ${CMAKE_SOURCE_DIR}/third_party/libacars
     ${RTLSDR_INCLUDE_DIRS}
     ${HACKRF_INCLUDE_DIRS}
 )
 target_compile_definitions(InmarScope PRIVATE _USE_MATH_DEFINES)
 find_library(ZSTD_LIBRARIES NAMES zstd libzstd REQUIRED)
-target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES})
+find_library(ZLIB_LIB NAMES z libz zlib REQUIRED)
+target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES})
 target_link_directories(InmarScope PRIVATE ${RTLSDR_LIBRARY_DIRS})
 
 if(WIN32)
@@ -172,6 +183,7 @@ if(WIN32)
         libhackrf.dll
         libusb-1.0.dll
         libzstd.dll
+        zlib1.dll
     )
     foreach(dll ${FRAMESYNC_RUNTIME_DLLS})
         if(EXISTS "${MINGW_BIN}/${dll}")

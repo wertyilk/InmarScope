@@ -1407,6 +1407,7 @@ static void drawMessages(App& app)
         for (auto it = msgs.rbegin(); it != msgs.rend(); ++it)
         {
             ImGui::TableNextRow();
+            ImGui::PushID((int)(it->timeSec * 1000.0) ^ (int)it->aesId ^ it->channelId);
             ImGui::TableNextColumn();
             ImGui::Text("%.3f", it->freqMHz);
             ImGui::TableNextColumn();
@@ -1419,6 +1420,21 @@ static void drawMessages(App& app)
             ImGui::TextUnformatted(it->label.c_str());
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(it->text.c_str());
+            if (it->hasPos)
+                ImGui::TextColored(ImVec4(0.3f, 0.9f, 1.0f, 1.0f),
+                                   "POS %.4f, %.4f  %d ft", it->lat, it->lon, it->alt);
+            if (!it->decoded.empty())
+            {
+                if (ImGui::TreeNodeEx("decoded", ImGuiTreeNodeFlags_SpanAvailWidth,
+                                      "decoded (CPDLC/ADS-C/MIAM)"))
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 1.0f, 0.6f, 1.0f));
+                    ImGui::TextUnformatted(it->decoded.c_str());
+                    ImGui::PopStyleColor();
+                    ImGui::TreePop();
+                }
+            }
+            ImGui::PopID();
         }
         ImGui::EndTable();
     }

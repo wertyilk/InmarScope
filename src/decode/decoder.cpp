@@ -5,6 +5,7 @@
 #include "voice/wav_writer.h"
 #include "audio/audio_output.h"
 #include "decode/egc/egc_decoder.h"
+#include "decode/acars_apps.h"
 
 #include <cstdio>
 #include <ctime>
@@ -270,6 +271,22 @@ void Decoder::onAcars2(const jaero_acars_msg* msg)
     if (s != std::string::npos)
         t = t.substr(s, e - s + 1);
     m.text = t;
+
+    // Decode the embedded application (CPDLC / ADS-C / MIAM ...) via libacars.
+    // Use the raw text bytes (not the space-folded copy) so encoded payloads parse.
+    if (msg->text_len > 0 && msg->label[0] != '\0')
+    {
+        std::string raw(reinterpret_cast<const char*>(msg->text), (size_t)msg->text_len);
+        AcarsAppResult app = decodeAcarsApps(m.label, raw, m.downlink != 0);
+        if (app.decoded)
+        {
+            m.decoded = app.text;
+            m.hasPos = app.hasPos;
+            m.lat = app.lat;
+            m.lon = app.lon;
+            m.alt = app.alt;
+        }
+    }
 
     if (log_)
         log_->add(m);

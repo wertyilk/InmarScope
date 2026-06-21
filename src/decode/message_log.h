@@ -21,6 +21,11 @@ struct DecodedMessage
     char blockId = 0;  // ACARS block id char
     std::string text;  // printable rendering of the payload
     std::string hex;   // hex rendering
+    std::string decoded; // libacars-decoded application text (CPDLC/ADS-C/...), empty if none
+    bool   hasPos = false; // a position was extracted (ADS-C)
+    double lat = 0.0;
+    double lon = 0.0;
+    int    alt = 0;        // altitude in feet (ADS-C)
 };
 
 class MessageLog
