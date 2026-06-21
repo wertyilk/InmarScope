@@ -114,6 +114,8 @@ struct NetworkChannel
     std::string kind; // "Psmc (P-ch RX)", "Rsmc0 (R-ch TX)", "CAC", ...
     uint8_t ges = 0;
     uint64_t hits = 0;
+    bool decodable = false; // forward-link channel we can demod
+    int baud = 0;           // suggested decoder baud (0 if not decodable)
 };
 
 struct SatInfo
@@ -128,7 +130,8 @@ struct SatInfo
 class ChannelTable
 {
 public:
-    void addChannel(double freqMHz, const std::string& kind, uint8_t ges)
+    void addChannel(double freqMHz, const std::string& kind, uint8_t ges,
+                    bool decodable, int baud)
     {
         std::lock_guard<std::mutex> lk(mtx_);
         for (auto& c : chans_)
@@ -138,7 +141,7 @@ public:
                 c.ges = ges;
                 return;
             }
-        chans_.push_back({freqMHz, kind, ges, 1});
+        chans_.push_back({freqMHz, kind, ges, 1, decodable, baud});
     }
 
     void setSatellite(int satId, const std::string& longitude)

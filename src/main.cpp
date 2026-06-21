@@ -25,6 +25,7 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -83,6 +84,19 @@ struct App
     int selectedDecoder = -1;     // channelId shown in the constellation panel
     std::vector<float> constBuf;  // interleaved I,Q scratch for the plot
 
+    // Voice follow: when a C-channel voice assignment appears, hop the SDR to
+    // the assigned RX (forward) frequency, decode the 8400 voice call, then hop
+    // back to the P-channel home when the call goes idle.
+    bool   voiceFollow = false;
+    float  followHoldSec = 6.0f;        // idle time before ending a follow
+    bool   following = false;           // a follow is currently active
+    bool   followRetuned = false;       // true if we had to move the SDR center
+    int    followChannelId = -1;        // the spawned 8400 voice decoder
+    double followHomeMHz = 0.0;         // P-channel center to return to
+    uint64_t followSeenCount = 0;       // cassign entries already considered
+    std::vector<std::pair<double, int>> followHome; // home decoders (MHz, baud)
+    std::chrono::steady_clock::time_point followActivity;
+
     // Device list.
     std::vector<SdrDeviceInfo> devices;
     int deviceIndex = 0;
@@ -115,6 +129,11 @@ struct App
     double viewXminMHz = 0.0;
     double viewXmaxMHz = 0.0;
     bool   resetView = true; // fit X to the full band on next draw
+
+    // Band browsing: panning/scrolling the spectrum past the captured window
+    // retunes a live SDR so you can sweep the whole band (not for WAV files).
+    bool   bandBrowse = true;
+    std::chrono::steady_clock::time_point lastRetune;
 
     // Horizontal insets of the spectrum's plot data area (axis gutters), used
     // to align the waterfall to the spectrum frequency-for-frequency.
@@ -243,6 +262,140 @@ static void processFft(App& app)
     app.waterfall.addRow(app.inst.data(), N, app.dbMin, app.dbMax);
 }
 
+// C-channel assignment types that carry a voice call (0x31 distress .. 0x34
+// non-safety). All of these point at a forward-link RX voice carrier.
+static bool isVoiceAssign(uint8_t type)
+{
+    return type >= 0x31 && type <= 0x34;
+}
+
+// Retune the active (live) source to a new center and re-point the decoder
+// manager there. Wipes all decoders -- callers restore what they need.
+static void retuneActive(App& app, double centerMHz)
+{
+    double hz = centerMHz * 1e6;
+    app.centerFreqMHz = centerMHz;
+    app.resetView = true;
+    if (app.sourceMode == 0)
+        app.sdr.setCenterFreq(hz);
+    else if (app.sourceMode == 2)
+        app.server.setCenterFreq(hz);
+    app.decoders.removeAll();
+    app.decoders.configure(app.active->sampleRate(), hz);
+}
+
+// Retune a live source to a new center while keeping the current decoders
+// (re-added at their same absolute frequencies) and the user's spectrum view.
+// Used for band browsing, where we sweep the radio as the view is panned.
+static void retunePreserving(App& app, double centerMHz)
+{
+    std::vector<std::pair<double, int>> keep;
+    for (auto& s : app.decoders.status())
+        keep.push_back({s.freqMHz, s.baud});
+
+    double hz = centerMHz * 1e6;
+    app.centerFreqMHz = centerMHz;
+    if (app.sourceMode == 0)
+        app.sdr.setCenterFreq(hz);
+    else if (app.sourceMode == 2)
+        app.server.setCenterFreq(hz);
+    app.decoders.removeAll();
+    app.decoders.configure(app.active->sampleRate(), hz);
+    for (auto& k : keep)
+        app.decoders.addDecoder(k.first * 1e6, k.second);
+}
+
+// Drives the voice-follow state machine once per frame while a source runs.
+static void updateVoiceFollow(App& app)
+{
+    using clock = std::chrono::steady_clock;
+    const bool canRetune = (app.sourceMode != 1); // WAV center is just a label
+    const uint64_t total = app.decoders.cassignLog().count();
+
+    if (!app.following)
+    {
+        if (!app.voiceFollow)
+        {
+            app.followSeenCount = total; // stay in sync while disabled
+            return;
+        }
+        if (total <= app.followSeenCount)
+            return; // no new assignment since we last looked
+
+        // Pick the most recent voice assignment with a usable RX frequency.
+        auto items = app.decoders.cassignLog().snapshot();
+        const CassignEntry* pick = nullptr;
+        for (auto it = items.rbegin(); it != items.rend(); ++it)
+            if (isVoiceAssign(it->type) && it->rxMHz > 1.0)
+            {
+                pick = &*it;
+                break;
+            }
+        app.followSeenCount = total;
+        if (!pick)
+            return;
+
+        const double rx = pick->rxMHz;
+        const double centerMHz = app.active->centerFreq() / 1e6;
+        const double halfMHz = (app.active->sampleRate() / 1e6) * 0.45;
+        const bool inBand = std::fabs(rx - centerMHz) <= halfMHz;
+
+        app.followHomeMHz = app.centerFreqMHz;
+        app.followRetuned = false;
+
+        if (!inBand)
+        {
+            if (!canRetune)
+                return; // out of band and can't move the SDR -> skip
+            app.followHome.clear();
+            for (auto& s : app.decoders.status())
+                app.followHome.push_back({s.freqMHz, s.baud});
+            retuneActive(app, rx);
+            app.followRetuned = true;
+        }
+
+        app.followChannelId = app.decoders.addDecoder(rx * 1e6, 8400);
+        if (app.followChannelId < 0)
+            return; // failed to spawn (e.g. manager not configured)
+        app.decoders.setVoiceMonitor(app.followChannelId);
+        app.selectedDecoder = app.followChannelId;
+        app.following = true;
+        app.followActivity = clock::now();
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "Following voice %.4f MHz", rx);
+        app.status = buf;
+        return;
+    }
+
+    // A follow is active: track liveness and end on idle / disable.
+    bool active = (app.decoders.audioLevel() > 0.002f);
+    for (auto& s : app.decoders.status())
+        if (s.channelId == app.followChannelId)
+        {
+            active = active || s.locked;
+            break;
+        }
+    const auto now = clock::now();
+    if (active)
+        app.followActivity = now;
+    const double idle = std::chrono::duration<double>(now - app.followActivity).count();
+
+    if (idle > app.followHoldSec || !app.voiceFollow)
+    {
+        app.decoders.removeDecoder(app.followChannelId);
+        app.followChannelId = -1;
+        if (app.followRetuned)
+        {
+            retuneActive(app, app.followHomeMHz);
+            for (auto& h : app.followHome)
+                app.decoders.addDecoder(h.first * 1e6, h.second);
+            app.followHome.clear();
+        }
+        app.following = false;
+        app.status = "Running";
+    }
+}
+
 static void startActive(App& app)
 {
     app.ring.clear();
@@ -304,6 +457,11 @@ static void startActive(App& app)
         app.decoders.removeAll();
         app.decoders.configure(app.active->sampleRate(), app.active->centerFreq());
         app.decoders.start();
+        // Don't auto-follow assignments left over from a previous session.
+        app.followSeenCount = app.decoders.cassignLog().count();
+        app.following = false;
+        app.followChannelId = -1;
+        app.followHome.clear();
     }
 
     app.status = ok ? "Running" : ("Error: " + err);
@@ -337,6 +495,9 @@ static void drawControls(App& app)
             app.active->stop();
             app.decoders.stop();
             app.decoders.removeAll();
+            app.following = false;
+            app.followChannelId = -1;
+            app.followHome.clear();
             app.status = "Idle";
         }
     }
@@ -474,21 +635,37 @@ static void drawControls(App& app)
     ImGui::SameLine();
     ImGui::TextDisabled("drag=pan  scroll=zoom  dbl-click=fit");
 
+    ImGui::BeginDisabled(app.sourceMode == 1);
+    ImGui::Checkbox("Pan/scroll retunes SDR (browse band)", &app.bandBrowse);
+    ImGui::EndDisabled();
+    if (app.sourceMode == 1)
+        ImGui::TextDisabled("  (WAV: tuning is fixed to the file)");
+
     ImGui::Separator();
     const char* bauds[] = {"600", "1200", "8400", "10500"};
     ImGui::Combo("Decode baud", &app.newBaud, bauds, 4);
     ImGui::TextDisabled("Ctrl+click the spectrum to add a decoder there");
 
+    ImGui::Separator();
+    ImGui::Checkbox("Follow C-channel voice", &app.voiceFollow);
+    if (app.sourceMode == 1)
+        ImGui::TextDisabled("  (WAV: only voice already in-band can be followed)");
+    ImGui::SetNextItemWidth(140.0f);
+    ImGui::SliderFloat("Hold (s)", &app.followHoldSec, 1.0f, 30.0f, "%.0f");
+    if (app.following)
+    {
+        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.35f, 1.0f),
+                           "  Following ch %d @ %.4f MHz%s", app.followChannelId,
+                           app.centerFreqMHz, app.followRetuned ? " (hopped)" : "");
+    }
+    else if (app.voiceFollow)
+    {
+        ImGui::TextDisabled("  Waiting for a voice assignment...");
+    }
+
     if (running)
     {
         ImGui::Separator();
-        if (app.sourceMode == 0)
-        {
-            ImGui::TextUnformatted("Radio status:");
-            ImGui::Text("  Tuner:         %s", app.sdr.tunerType().c_str());
-            ImGui::Text("  Requested:     %.4f MHz", app.centerFreqMHz);
-            ImGui::Text("  Actual center: %.4f MHz", app.sdr.actualCenterFreq() / 1e6);
-        }
         ImGui::Text("  Sample rate:   %.4f MHz", app.active->sampleRate() / 1e6);
         ImGui::Text("  Input level:   %.1f dBFS", app.rmsDbfs);
         ImGui::Text("  Spectrum:      %.0f .. %.0f dB", app.frameDbMin, app.frameDbMax);
@@ -553,6 +730,26 @@ static void drawSpectrum(App& app)
         ImPlotRect lim = ImPlot::GetPlotLimits();
         app.viewXminMHz = lim.X.Min;
         app.viewXmaxMHz = lim.X.Max;
+
+        // Band browsing: if the view has been panned/zoomed so its center drifts
+        // outside the captured window, retune a live SDR to follow. Throttled and
+        // dead-banded so a steady drag sweeps the radio without thrashing.
+        if (app.bandBrowse && app.sourceMode != 1 && app.active->running() &&
+            !app.resetView)
+        {
+            double viewCtr = 0.5 * (app.viewXminMHz + app.viewXmaxMHz);
+            double sdrCtr = app.active->centerFreq() / 1e6;
+            double fsMHz = app.active->sampleRate() / 1e6;
+            double deadband = fsMHz * 0.20;
+            auto now = std::chrono::steady_clock::now();
+            double sinceMs =
+                std::chrono::duration<double, std::milli>(now - app.lastRetune).count();
+            if (fsMHz > 0.0 && std::fabs(viewCtr - sdrCtr) > deadband && sinceMs > 150.0)
+            {
+                retunePreserving(app, viewCtr);
+                app.lastRetune = now;
+            }
+        }
 
         // Inset of the plot's data area within the panel, so the waterfall can
         // align to the exact same horizontal frequency span.
@@ -849,7 +1046,6 @@ static void drawNetwork(App& app)
     ImGui::TextDisabled("Discovered from system-table broadcasts. RX = forward (decodable).");
     ImGui::Separator();
 
-    static const int kBaudVals[] = {600, 1200, 8400, 10500};
     auto chans = app.decoders.channelTable().snapshot();
     if (ImGui::BeginTable("##net", 5,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
@@ -876,12 +1072,16 @@ static void drawNetwork(App& app)
             ImGui::TableNextColumn();
             ImGui::Text("%llu", (unsigned long long)c.hits);
             ImGui::TableNextColumn();
-            char btn[24];
-            std::snprintf(btn, sizeof(btn), "Tune##%zu", i);
-            if (ImGui::SmallButton(btn))
+            if (c.decodable)
             {
-                int idx = app.newBaud < 0 ? 0 : (app.newBaud > 3 ? 3 : app.newBaud);
-                app.decoders.addDecoder(c.freqMHz * 1e6, kBaudVals[idx]);
+                char btn[24];
+                std::snprintf(btn, sizeof(btn), "Tune##%zu", i);
+                if (ImGui::SmallButton(btn))
+                    app.decoders.addDecoder(c.freqMHz * 1e6, c.baud);
+            }
+            else
+            {
+                ImGui::TextDisabled("return");
             }
         }
         ImGui::EndTable();
@@ -1000,7 +1200,7 @@ static void drawDockHost()
         ImGui::DockBuilderSetNodeSize(dockId, vp->WorkSize);
 
         ImGuiID left, right, rtop, rrest, rmid, rbot, rcon, ctrl, dec;
-        ImGui::DockBuilderSplitNode(dockId, ImGuiDir_Left, 0.26f, &left, &right);
+        ImGui::DockBuilderSplitNode(dockId, ImGuiDir_Left, 0.32f, &left, &right);
         ImGui::DockBuilderSplitNode(left, ImGuiDir_Up, 0.62f, &ctrl, &dec);
         // Right column: Spectrum (short, top) / Waterfall (middle) / bottom row.
         ImGui::DockBuilderSplitNode(right, ImGuiDir_Up, 0.30f, &rtop, &rrest);
@@ -1082,6 +1282,9 @@ int main(int, char**)
 
         if (app.active->running())
             processFft(app);
+
+        if (app.active->running())
+            updateVoiceFollow(app);
 
         drawControls(app);
         drawSpectrum(app);

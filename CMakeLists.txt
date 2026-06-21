@@ -54,6 +54,10 @@ target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}/backends
     ${IMPLOT_DIR}
 )
+# implot_items.cpp is extremely template-heavy: ~5 min to compile at -O2.
+# It is not performance-critical for us, so build it at -O1 (~1 min). The last
+# -O flag wins in GCC, so this overrides the RelWithDebInfo -O2.
+set_source_files_properties(${IMPLOT_DIR}/implot_items.cpp PROPERTIES COMPILE_OPTIONS "-O1")
 target_link_libraries(imgui PUBLIC OpenGL::GL)
 if(glfw3_FOUND)
     target_link_libraries(imgui PUBLIC glfw)
@@ -128,6 +132,10 @@ target_link_directories(FrameSync PRIVATE ${RTLSDR_LIBRARY_DIRS})
 
 if(WIN32)
     target_link_libraries(FrameSync PRIVATE opengl32 gdi32 comdlg32 ole32 winmm ws2_32)
+
+    # Build as a GUI-subsystem app so no console window opens alongside the GUI.
+    # MinGW provides a WinMain shim, so the existing int main() still works.
+    set_target_properties(FrameSync PROPERTIES WIN32_EXECUTABLE TRUE)
 
     # Copy MinGW runtime DLLs next to the executable so it runs standalone
     # (PyCharm, double-click) without the MSYS2 bin dir on PATH.

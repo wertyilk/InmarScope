@@ -289,23 +289,23 @@ void Decoder::onDecoded(const uint8_t* data, int len)
             {
                 f2 += 101.5;
                 f3 += 101.5;
-                netTable_->addChannel(f1, "Psmc (P-ch RX)", ges);
-                netTable_->addChannel(f2, "Rsmc0 (R-ch TX)", ges);
-                netTable_->addChannel(f3, "Rsmc1 (R-ch TX)", ges);
+                netTable_->addChannel(f1, "Psmc (P-ch RX)", ges, true, 1200);
+                netTable_->addChannel(f2, "Rsmc0 (R-ch TX)", ges, false, 0);
+                netTable_->addChannel(f3, "Rsmc1 (R-ch TX)", ges, false, 0);
             }
             else if (lsu == 2)
             {
                 f1 += 101.5; f2 += 101.5; f3 += 101.5;
-                netTable_->addChannel(f1, "Rsmc2 (R-ch TX)", ges);
-                netTable_->addChannel(f2, "Rsmc3 (R-ch TX)", ges);
-                netTable_->addChannel(f3, "Rsmc4 (R-ch TX)", ges);
+                netTable_->addChannel(f1, "Rsmc2 (R-ch TX)", ges, false, 0);
+                netTable_->addChannel(f2, "Rsmc3 (R-ch TX)", ges, false, 0);
+                netTable_->addChannel(f3, "Rsmc4 (R-ch TX)", ges, false, 0);
             }
             else
             {
                 f1 += 101.5; f2 += 101.5; f3 += 101.5;
-                netTable_->addChannel(f1, "Rsmc5 (R-ch TX)", ges);
-                netTable_->addChannel(f2, "Rsmc6 (R-ch TX)", ges);
-                netTable_->addChannel(f3, "Rsmc7 (R-ch TX)", ges);
+                netTable_->addChannel(f1, "Rsmc5 (R-ch TX)", ges, false, 0);
+                netTable_->addChannel(f2, "Rsmc6 (R-ch TX)", ges, false, 0);
+                netTable_->addChannel(f3, "Rsmc7 (R-ch TX)", ges, false, 0);
             }
         }
         else if (data[0] == 0x0C) // satellite identification + CAC/Psmc
@@ -324,9 +324,9 @@ void Decoder::onDecoded(const uint8_t* data, int len)
             else
                 std::snprintf(lonbuf, sizeof(lonbuf), "%.1fE", lon);
             netTable_->setSatellite(satid, lonbuf);
-            netTable_->addChannel(cac1, "CAC/Psmc1 (P-ch RX)", 0);
+            netTable_->addChannel(cac1, "CAC/Psmc1 (P-ch RX)", 0, true, 1200);
             if (ch2)
-                netTable_->addChannel(cac2, "CAC/Psmc2 (P-ch RX)", 0);
+                netTable_->addChannel(cac2, "CAC/Psmc2 (P-ch RX)", 0, true, 1200);
         }
     }
 }
