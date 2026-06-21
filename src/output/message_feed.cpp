@@ -63,6 +63,7 @@ MessageFeed::~MessageFeed()
 {
     closeFile();
     closeUdp();
+    closeSbs();
 }
 
 void MessageFeed::setFileEnabled(bool on, const std::string& path)
@@ -139,6 +140,94 @@ void MessageFeed::closeUdp()
     addr_ = nullptr;
 }
 
+void MessageFeed::setSbsEnabled(bool on, const std::string& host, int port)
+{
+    std::lock_guard<std::mutex> lk(mtx_);
+    if (on && (host != sbsHost_ || port != sbsPort_ || sbsSock_ == ~(uintptr_t)0))
+    {
+        closeSbs();
+        sbsHost_ = host;
+        sbsPort_ = port;
+        ensureSbs();
+    }
+    else if (!on)
+    {
+        closeSbs();
+    }
+    sbsEnabled_ = on && sbsSock_ != ~(uintptr_t)0;
+}
+
+void MessageFeed::ensureSbs()
+{
+    socket_t s = ::socket(AF_INET, SOCK_DGRAM, 0);
+    if (s == INVALID_SOCKET) return;
+    auto* a = new sockaddr_in{};
+    a->sin_family = AF_INET;
+    a->sin_port = htons((uint16_t)sbsPort_);
+    if (::inet_pton(AF_INET, sbsHost_.c_str(), &a->sin_addr) != 1)
+    {
+        addrinfo hints{}, *res = nullptr;
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        if (getaddrinfo(sbsHost_.c_str(), nullptr, &hints, &res) == 0 && res)
+        {
+            a->sin_addr = ((sockaddr_in*)res->ai_addr)->sin_addr;
+            freeaddrinfo(res);
+        }
+        else
+        {
+            CLOSESOCK(s);
+            delete a;
+            return;
+        }
+    }
+    sbsSock_ = (uintptr_t)s;
+    sbsAddr_ = a;
+}
+
+void MessageFeed::closeSbs()
+{
+    if (sbsSock_ != ~(uintptr_t)0) { CLOSESOCK((socket_t)sbsSock_); sbsSock_ = ~(uintptr_t)0; }
+    delete (sockaddr_in*)sbsAddr_;
+    sbsAddr_ = nullptr;
+}
+
+void MessageFeed::emitSbs(const DecodedMessage& m)
+{
+    std::lock_guard<std::mutex> lk(mtx_);
+    if (!sbsEnabled_ || sbsSock_ == ~(uintptr_t)0 || !sbsAddr_)
+        return;
+
+    std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    char dbuf[16], tbuf[16];
+    std::snprintf(dbuf, sizeof(dbuf), "%04d/%02d/%02d", tm.tm_year + 1900, tm.tm_mon + 1,
+                  tm.tm_mday);
+    std::snprintf(tbuf, sizeof(tbuf), "%02d:%02d:%02d.000", tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+    char hex[8];
+    if (!m.icao.empty())
+        std::snprintf(hex, sizeof(hex), "%s", m.icao.c_str());
+    else
+        std::snprintf(hex, sizeof(hex), "%06X", m.aesId & 0xFFFFFF);
+
+    std::string callsign = !m.flight.empty() ? m.flight : m.reg;
+
+    // BaseStation MSG,3 (airborne position): HexIdent, Callsign, Altitude, Lat, Lon.
+    char line[256];
+    int n = std::snprintf(line, sizeof(line),
+        "MSG,3,1,1,%s,1,%s,%s,%s,%s,%s,%d,,,%.5f,%.5f,,,,,,0\r\n",
+        hex, dbuf, tbuf, dbuf, tbuf, callsign.c_str(), m.alt, m.lat, m.lon);
+
+    ::sendto((socket_t)sbsSock_, line, n, 0, (sockaddr*)sbsAddr_, sizeof(sockaddr_in));
+    ++sbsSent_;
+}
+
 void MessageFeed::emit(const std::string& line)
 {
     std::lock_guard<std::mutex> lk(mtx_);
@@ -158,7 +247,11 @@ void MessageFeed::emit(const std::string& line)
 
 void MessageFeed::feedAcars(const DecodedMessage& m)
 {
-    if (!enabled()) return;
+    if (sbsEnabled_ && m.hasPos)
+        emitSbs(m);
+
+    if (!fileEnabled_ && !udpEnabled_)
+        return;
 
     if (format_ == JAERO_TEXT)
     {

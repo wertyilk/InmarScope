@@ -50,6 +50,7 @@ public:
     int    baud() const { return baud_; }
     int    channelId() const { return channelId_; }
     uint64_t msgCount() const { return msgCount_.load(); }
+    uint64_t voiceFrames() const { return voiceFrames_.load(); } // decoded AMBE frames
     bool   isVoice() const { return baud_ == 8400; }
     bool   isEgc() const { return baud_ == kEgcBaud; }
     int    egcBer() const;    // -1 if not EGC
@@ -99,6 +100,7 @@ private:
     int baud_;
     int channelId_;
     std::atomic<uint64_t> msgCount_{0};
+    std::atomic<uint64_t> voiceFrames_{0};
 
     std::unique_ptr<AmbeDecoder> ambe_; // voice (8400) only
     AudioOutput* audioSink_ = nullptr;

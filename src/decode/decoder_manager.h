@@ -56,12 +56,15 @@ public:
 
     std::vector<Status> status();
     int getConstellation(int channelId, std::vector<float>& out, int maxPairs);
+    // Number of decoded AMBE voice frames for a channel (voice-follow activity).
+    uint64_t voiceFrames(int channelId);
     uint64_t drops() const { return drops_.load(); }
     MessageLog& log() { return log_; }
     MessageLog& suLog() { return suLog_; }
     CassignLog& cassignLog() { return cassign_; }
     ChannelTable& channelTable() { return netTable_; }
     EgcLog& egcLog() { return egcLog_; }
+    AircraftTable& aircraftTable() { return acTable_; }
 
     // Voice: route one 8400 decoder's audio to the speakers.
     void setVoiceMonitor(int channelId);
@@ -121,6 +124,7 @@ private:
     CassignLog cassign_;
     ChannelTable netTable_;
     EgcLog egcLog_;
+    AircraftTable acTable_;
     AudioOutput audio_;
     int voiceMonitorId_ = -1;
     bool recordOn_ = false;

@@ -415,6 +415,7 @@ void Decoder::onVoice(const uint8_t* frame, int len)
         return;
     int16_t pcm[AmbeDecoder::kPcmSamples];
     ambe_->decode(frame, pcm);
+    voiceFrames_.fetch_add(1); // decoded-audio activity signal (used by voice-follow)
     if (record_.load())
         recordPcm(pcm, AmbeDecoder::kPcmSamples);
     if (monitored_.load() && audioSink_)

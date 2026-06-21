@@ -145,6 +145,9 @@ struct App
     int    outUdpPort = 5556;
     int    outFormat = 0; // 0 = JSON, 1 = JAERO text
     char   outStation[64] = "";
+    bool   outSbs = false; // SBS/BaseStation position feed over UDP
+    char   outSbsHost[128] = "127.0.0.1";
+    int    outSbsPort = 30003;
 
     // Voice follow: when a C-channel voice assignment appears, hop the SDR to
     // the assigned RX (forward) frequency, decode the 8400 voice call, then hop
@@ -153,10 +156,11 @@ struct App
     float  followHoldSec = 6.0f;        // idle time before ending a follow
     bool   following = false;           // a follow is currently active
     bool   followRetuned = false;       // true if we had to move the SDR center
-    bool   followEverLocked = false;    // the voice decoder has locked at least once
+    bool   followEverLocked = false;    // the voice decoder has produced audio at least once
     int    followChannelId = -1;        // the spawned 8400 voice decoder
     double followHomeMHz = 0.0;         // P-channel center to return to
     uint64_t followSeenCount = 0;       // cassign entries already considered
+    uint64_t followVoiceFrames = 0;     // last observed decoded-audio frame count
     std::vector<std::pair<double, int>> followHome; // home decoders (MHz, baud)
     std::chrono::steady_clock::time_point followActivity;
 
@@ -191,6 +195,7 @@ struct App
     float  browseEdgePct = 24.5f;    // recenter when view edge is within this % of band edge
     float  browseThrottleMs = 20.0f; // minimum time between retunes
     float  browseMinMovePct = 0.10f; // minimum view movement before retuning
+    bool   acPosOnly = false;        // Aircraft panel: show only entries with a position
 
     // Last sample rate the decoder manager was configured with; if the source
     // rate changes (e.g. SDR++ server rate switch), the manager + FFT are
@@ -411,18 +416,25 @@ static void updateVoiceFollow(App& app)
             app.following = true;
             app.followRetuned = true;
             app.followEverLocked = false;
+            app.followVoiceFrames = 0;
             app.followActivity = clock::now();
             char buf[64];
             std::snprintf(buf, sizeof(buf), "Voice SDR following %.4f MHz", rx);
             app.status = buf;
             return;
         }
+        // End the follow based on decoded audio, not lock: an 8400 carrier can
+        // stay "locked" on idle after a call, so revert when no AMBE voice frames
+        // have been decoded for the hold time (longer grace before the first one).
         constexpr double kAcquireSec = 12.0;
-        bool locked = false;
-        for (auto& s : app.decodersB.status())
-            if (s.channelId == app.followChannelId) { locked = s.locked; break; }
         const auto now = clock::now();
-        if (locked) { app.followActivity = now; app.followEverLocked = true; }
+        uint64_t vf = app.decodersB.voiceFrames(app.followChannelId);
+        if (vf > app.followVoiceFrames)
+        {
+            app.followVoiceFrames = vf;
+            app.followActivity = now;
+            app.followEverLocked = true; // "ever had audio"
+        }
         double grace = app.followEverLocked ? (double)app.followHoldSec
                                             : std::max((double)app.followHoldSec, kAcquireSec);
         double idle = std::chrono::duration<double>(now - app.followActivity).count();
@@ -489,6 +501,7 @@ static void updateVoiceFollow(App& app)
         app.selectedDecoder = app.followChannelId;
         app.following = true;
         app.followEverLocked = false;
+        app.followVoiceFrames = 0;
         app.followActivity = clock::now();
         char buf[64];
         std::snprintf(buf, sizeof(buf), "Following voice %.4f MHz", rx);
@@ -496,25 +509,20 @@ static void updateVoiceFollow(App& app)
         return;
     }
 
-    // A follow is active: hold the channel while the voice decoder is locked.
-    // End when it has been unlocked for the hold time, then jump back to where
-    // the user was (e.g. the 10500 channels they were decoding). A longer grace
-    // applies before the first lock so we don't bail during acquisition.
+    // A follow is active. End it based on decoded audio rather than lock: the
+    // 8400 carrier can stay "locked" on idle/noise after the call ends, which
+    // would strand the SDR away from home. Instead, revert when no AMBE voice
+    // frames have been decoded for the hold time. A longer grace applies before
+    // the first frame so we don't bail during acquisition.
     constexpr double kAcquireSec = 12.0;
-    bool locked = false;
-    for (auto& s : app.decoders.status())
-        if (s.channelId == app.followChannelId)
-        {
-            locked = s.locked;
-            break;
-        }
-        const auto now = clock::now();
-    if (locked)
+    const auto now = clock::now();
+    uint64_t vf = app.decoders.voiceFrames(app.followChannelId);
+    if (vf > app.followVoiceFrames)
     {
+        app.followVoiceFrames = vf;
         app.followActivity = now;
-        app.followEverLocked = true;
+        app.followEverLocked = true; // "ever had audio"
     }
-
 
     double grace = app.followEverLocked
                        ? (double)app.followHoldSec
@@ -545,6 +553,7 @@ static void updateFeed(App& app)
     app.feed.setStationId(app.outStation);
     app.feed.setFileEnabled(app.outFile, app.outFilePath);
     app.feed.setUdpEnabled(app.outUdp, app.outUdpHost, app.outUdpPort);
+    app.feed.setSbsEnabled(app.outSbs, app.outSbsHost, app.outSbsPort);
 
     auto& alog = app.decoders.log();
     uint64_t at = alog.count();
@@ -1067,8 +1076,16 @@ static void drawControls(App& app)
         ImGui::InputInt("UDP port", &app.outUdpPort);
         ImGui::SetNextItemWidth(-70.0f);
         ImGui::InputText("Station", app.outStation, sizeof(app.outStation));
+        ImGui::Separator();
+        ImGui::Checkbox("Send SBS/BaseStation positions (UDP)", &app.outSbs);
+        ImGui::SetNextItemWidth(-70.0f);
+        ImGui::InputText("SBS host", app.outSbsHost, sizeof(app.outSbsHost));
+        ImGui::InputInt("SBS port", &app.outSbsPort);
+        if (app.outSbs)
+            ImGui::Text("SBS sent: %llu", (unsigned long long)app.feed.sbsSent());
         ImGui::Text("Sent: %llu", (unsigned long long)app.feed.sent());
         ImGui::TextDisabled("ACARS -> JAERO JSONdump; EGC -> STD-C JSON.");
+        ImGui::TextDisabled("SBS feeds ADS-C positions to tar1090 / Virtual Radar.");
     }
 
     if (running)
@@ -1442,6 +1459,70 @@ static void drawMessages(App& app)
     ImGui::End();
 }
 
+static void drawAircraft(App& app)
+{
+    ImGui::Begin("Aircraft");
+
+    auto acs = app.decoders.aircraftTable().snapshot();
+    ImGui::Text("%zu tracked", acs.size());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear"))
+        app.decoders.aircraftTable().clear();
+    ImGui::SameLine();
+    ImGui::Checkbox("With position only", &app.acPosOnly);
+    ImGui::Separator();
+
+    double now = (double)std::time(nullptr);
+    // Newest activity first.
+    std::sort(acs.begin(), acs.end(),
+              [](const AircraftEntry& a, const AircraftEntry& b) { return a.lastSeen > b.lastSeen; });
+
+    if (ImGui::BeginTable("##aircraft", 9,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                          ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable))
+    {
+        ImGui::TableSetupColumn("AES", ImGuiTableColumnFlags_WidthFixed, 58);
+        ImGui::TableSetupColumn("ICAO", ImGuiTableColumnFlags_WidthFixed, 54);
+        ImGui::TableSetupColumn("Reg", ImGuiTableColumnFlags_WidthFixed, 64);
+        ImGui::TableSetupColumn("Flight", ImGuiTableColumnFlags_WidthFixed, 64);
+        ImGui::TableSetupColumn("Lat", ImGuiTableColumnFlags_WidthFixed, 70);
+        ImGui::TableSetupColumn("Lon", ImGuiTableColumnFlags_WidthFixed, 74);
+        ImGui::TableSetupColumn("Alt", ImGuiTableColumnFlags_WidthFixed, 56);
+        ImGui::TableSetupColumn("Age", ImGuiTableColumnFlags_WidthFixed, 48);
+        ImGui::TableSetupColumn("Msgs", ImGuiTableColumnFlags_WidthFixed, 48);
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableHeadersRow();
+
+        for (const auto& a : acs)
+        {
+            if (app.acPosOnly && !a.hasPos)
+                continue;
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%06X", a.aesId);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(a.icao.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(a.reg.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(a.flight.c_str());
+            ImGui::TableNextColumn();
+            if (a.hasPos) ImGui::Text("%.4f", a.lat);
+            ImGui::TableNextColumn();
+            if (a.hasPos) ImGui::Text("%.4f", a.lon);
+            ImGui::TableNextColumn();
+            if (a.hasPos) ImGui::Text("%d", a.alt);
+            ImGui::TableNextColumn();
+            ImGui::Text("%ds", (int)(now - a.lastSeen));
+            ImGui::TableNextColumn();
+            ImGui::Text("%llu", (unsigned long long)a.msgs);
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::End();
+}
+
 static const char* cassignTypeName(uint8_t t)
 {
     switch (t)
@@ -1737,6 +1818,7 @@ static void drawDockHost(App& app)
         ImGui::DockBuilderDockWindow("C-Channel", rbot);
         ImGui::DockBuilderDockWindow("Network", rbot);
         ImGui::DockBuilderDockWindow("EGC", rbot);
+        ImGui::DockBuilderDockWindow("Aircraft", rbot);
         ImGui::DockBuilderDockWindow("Constellation", rcon);
         ImGui::DockBuilderFinish(dockId);
     }
@@ -1830,6 +1912,7 @@ int main(int, char**)
         drawCChannel(app);
         drawNetwork(app);
         drawEgc(app);
+        drawAircraft(app);
         drawConstellation(app);
 
         int display_w, display_h;
