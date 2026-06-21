@@ -36,18 +36,6 @@ std::string jsonString(const std::string& body, const std::string& key)
     return out;
 }
 
-bool jsonBoolTrue(const std::string& body, const std::string& key)
-{
-    std::string pat = "\"" + key + "\"";
-    size_t k = body.find(pat);
-    if (k == std::string::npos) return false;
-    size_t c = body.find(':', k + pat.size());
-    if (c == std::string::npos) return false;
-    size_t i = c + 1;
-    while (i < body.size() && std::isspace((unsigned char)body[i])) ++i;
-    return body.compare(i, 4, "true") == 0;
-}
-
 // Compare dotted-numeric versions: returns >0 if a>b, <0 if a<b, 0 equal.
 int cmpVersion(const std::string& a, const std::string& b)
 {
@@ -139,9 +127,10 @@ void VersionCheck::run(std::string slug, std::string localVersion)
 
     std::string latest = jsonString(body, "version");
     std::string url = jsonString(body, "product_url");
-    bool flag = jsonBoolTrue(body, "update_available");
 
-    bool update = flag || (!latest.empty() && cmpVersion(latest, localVersion) > 0);
+    // The server can't know the running client's version (it isn't sent), so its
+    // "update_available" flag is unreliable. Decide solely on the published version.
+    bool update = !latest.empty() && cmpVersion(latest, localVersion) > 0;
     {
         std::lock_guard<std::mutex> lk(mtx_);
         latest_ = latest;
