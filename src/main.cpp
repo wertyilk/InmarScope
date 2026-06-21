@@ -95,6 +95,7 @@ struct App
     float  followHoldSec = 6.0f;        // idle time before ending a follow
     bool   following = false;           // a follow is currently active
     bool   followRetuned = false;       // true if we had to move the SDR center
+    bool   followEverLocked = false;    // the voice decoder has locked at least once
     int    followChannelId = -1;        // the spawned 8400 voice decoder
     double followHomeMHz = 0.0;         // P-channel center to return to
     uint64_t followSeenCount = 0;       // cassign entries already considered
@@ -286,6 +287,11 @@ static void retuneActive(App& app, double centerMHz)
         app.server.setCenterFreq(hz);
     app.decoders.removeAll();
     app.decoders.configure(app.active->sampleRate(), hz);
+    // Rebuild the frequency axis now (processFft already ran this frame with the
+    // old center) so drawSpectrum fits the view to the NEW band and the decoder
+    // marker stays on screen after a big follow jump.
+    if (app.curN > 0)
+        updateFreqAxis(app, app.curN);
 }
 
 // Retune a live source to a new center while keeping the current decoders
@@ -364,6 +370,7 @@ static void updateVoiceFollow(App& app)
         app.decoders.setVoiceMonitor(app.followChannelId);
         app.selectedDecoder = app.followChannelId;
         app.following = true;
+        app.followEverLocked = false;
         app.followActivity = clock::now();
         char buf[64];
         std::snprintf(buf, sizeof(buf), "Following voice %.4f MHz", rx);
@@ -371,20 +378,30 @@ static void updateVoiceFollow(App& app)
         return;
     }
 
-    // A follow is active: track liveness and end on idle / disable.
-    bool active = (app.decoders.audioLevel() > 0.002f);
+    // A follow is active: hold the channel while the voice decoder is locked.
+    // End when it has been unlocked for the hold time, then jump back to where
+    // the user was (e.g. the 10500 channels they were decoding). A longer grace
+    // applies before the first lock so we don't bail during acquisition.
+    constexpr double kAcquireSec = 8.0;
+    bool locked = false;
     for (auto& s : app.decoders.status())
         if (s.channelId == app.followChannelId)
         {
-            active = active || s.locked;
+            locked = s.locked;
             break;
         }
     const auto now = clock::now();
-    if (active)
+    if (locked)
+    {
         app.followActivity = now;
-    const double idle = std::chrono::duration<double>(now - app.followActivity).count();
+        app.followEverLocked = true;
+    }
+    double grace = app.followEverLocked
+                       ? (double)app.followHoldSec
+                       : std::max((double)app.followHoldSec, kAcquireSec);
+    double idle = std::chrono::duration<double>(now - app.followActivity).count();
 
-    if (idle > app.followHoldSec || !app.voiceFollow)
+    if (idle > grace || !app.voiceFollow)
     {
         app.decoders.removeDecoder(app.followChannelId);
         app.followChannelId = -1;
@@ -747,7 +764,7 @@ static void drawSpectrum(App& app)
         // outside the captured window, retune a live SDR to follow. Throttled and
         // dead-banded so a steady drag sweeps the radio without thrashing.
         if (app.bandBrowse && app.sourceMode != 1 && app.active->running() &&
-            !app.resetView)
+            !app.resetView && !app.following)
         {
             double viewCtr = 0.5 * (app.viewXminMHz + app.viewXmaxMHz);
             double sdrCtr = app.active->centerFreq() / 1e6;
