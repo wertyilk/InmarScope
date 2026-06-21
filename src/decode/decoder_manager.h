@@ -60,6 +60,13 @@ public:
     int  voiceMonitor() const { return voiceMonitorId_; }
     float audioLevel() { return audio_.level(); }
 
+    // Voice call recording: every 8400 decoder writes its calls to WAV files
+    // (one per call) in dir, independent of which channel is being monitored.
+    void setRecording(bool on, const std::string& dir);
+    bool recording() const { return recordOn_; }
+    const std::string& recordDir() const { return recordDir_; }
+    int  recordingCount(); // decoders with a call file currently open
+
 private:
     struct SubBand
     {
@@ -107,4 +114,6 @@ private:
     ChannelTable netTable_;
     AudioOutput audio_;
     int voiceMonitorId_ = -1;
+    bool recordOn_ = false;
+    std::string recordDir_ = "recordings";
 };

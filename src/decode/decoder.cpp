@@ -2,9 +2,15 @@
 
 #include "jaero_demod.h"
 #include "voice/ambe_decoder.h"
+#include "voice/wav_writer.h"
 #include "audio/audio_output.h"
 
 #include <cstdio>
+#include <ctime>
+#include <filesystem>
+
+// A voice call is considered finished when no AMBE frames arrive for this long.
+static constexpr double kCallGapSec = 1.5;
 
 // JAERO DSP config knob referenced by jaero_demod.cpp (0 = use the demod's
 // built-in default locking bandwidth).
@@ -114,6 +120,8 @@ Decoder::Decoder(double subRate, double subCenterHz, double chanFreqHz, int baud
 
 Decoder::~Decoder()
 {
+    if (rec_)
+        rec_->close();
     if (pmsk_)
         jaero_pmsk_destroy(pmsk_);
     if (oqpsk_)
@@ -122,6 +130,7 @@ Decoder::~Decoder()
 
 void Decoder::process(const double* iq, int nComplex)
 {
+    maintainRecording();
     ddcOut_.clear();
     ddc_.process(iq, nComplex, ddcOut_);
     if (ddcOut_.empty())
@@ -363,6 +372,62 @@ void Decoder::onVoice(const uint8_t* frame, int len)
         return;
     int16_t pcm[AmbeDecoder::kPcmSamples];
     ambe_->decode(frame, pcm);
+    if (record_.load())
+        recordPcm(pcm, AmbeDecoder::kPcmSamples);
     if (monitored_.load() && audioSink_)
         audioSink_->push(pcm, AmbeDecoder::kPcmSamples);
+}
+
+void Decoder::setRecording(bool on, const std::string& dir)
+{
+    if (on && !dir.empty())
+        recordDir_ = dir;
+    record_.store(on);
+}
+
+// Close the current call's file if recording was turned off or the call has
+// gone idle. Runs on the worker thread (from process()).
+void Decoder::maintainRecording()
+{
+    if (!recActive_.load())
+        return;
+    bool idle = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - lastVoiceTime_)
+                    .count() > kCallGapSec;
+    if (!record_.load() || idle)
+    {
+        if (rec_)
+            rec_->close();
+        recActive_.store(false);
+    }
+}
+
+void Decoder::recordPcm(const int16_t* pcm, int n)
+{
+    lastVoiceTime_ = std::chrono::steady_clock::now();
+    if (!recActive_.load())
+    {
+        // Start a new call file: <dir>/<UTC time>_<freq>MHz_ch<id>.wav
+        std::error_code ec;
+        std::filesystem::create_directories(recordDir_, ec);
+        std::time_t t = std::time(nullptr);
+        std::tm tm{};
+#if defined(_WIN32)
+        localtime_s(&tm, &t);
+#else
+        localtime_r(&t, &tm);
+#endif
+        char ts[32];
+        std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tm);
+        char name[256];
+        std::snprintf(name, sizeof(name), "%s/%s_%.4fMHz_ch%d.wav",
+                      recordDir_.c_str(), ts, chanFreqHz_ / 1e6, channelId_);
+        if (!rec_)
+            rec_ = std::make_unique<WavWriter>();
+        if (!rec_->open(name, 8000, 1))
+            return; // couldn't open: stay inactive, try again next frame
+        recActive_.store(true);
+    }
+    if (rec_)
+        rec_->write(pcm, n);
 }

@@ -98,6 +98,8 @@ int DecoderManager::addDecoder(double freqHz, int baud)
                     dec->setMonitored(true);
                     voiceMonitorId_ = id;
                 }
+                if (baud == 8400)
+                    dec->setRecording(recordOn_, recordDir_);
                 return id;
             }
         }
@@ -118,6 +120,8 @@ int DecoderManager::addDecoder(double freqHz, int baud)
         dec->setMonitored(true);
         voiceMonitorId_ = id;
     }
+    if (baud == 8400)
+        dec->setRecording(recordOn_, recordDir_);
     best->subbands.push_back(std::move(sb));
     best->count.fetch_add(1);
     return id;
@@ -157,6 +161,35 @@ void DecoderManager::setVoiceMonitor(int channelId)
                 d->setMonitored(d->isVoice() && d->channelId() == channelId);
     }
     audio_.clear();
+}
+
+void DecoderManager::setRecording(bool on, const std::string& dir)
+{
+    recordOn_ = on;
+    if (!dir.empty())
+        recordDir_ = dir;
+    for (auto& w : workers_)
+    {
+        std::lock_guard<std::mutex> lk(w->dMtx);
+        for (auto& sb : w->subbands)
+            for (auto& d : sb->decoders)
+                if (d->isVoice())
+                    d->setRecording(on, recordDir_);
+    }
+}
+
+int DecoderManager::recordingCount()
+{
+    int n = 0;
+    for (auto& w : workers_)
+    {
+        std::lock_guard<std::mutex> lk(w->dMtx);
+        for (auto& sb : w->subbands)
+            for (auto& d : sb->decoders)
+                if (d->isVoice() && d->recordingNow())
+                    ++n;
+    }
+    return n;
 }
 
 void DecoderManager::setDecoderFreq(int channelId, double freqHz)

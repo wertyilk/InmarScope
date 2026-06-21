@@ -117,6 +117,7 @@ add_executable(FrameSync
     src/decode/decoder.cpp
     src/decode/decoder_manager.cpp
     src/voice/ambe_decoder.cpp
+    src/voice/wav_writer.cpp
     src/audio/audio_output.cpp
 )
 target_include_directories(FrameSync PRIVATE

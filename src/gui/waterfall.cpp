@@ -100,7 +100,8 @@ void Waterfall::addRow(const float* db, int n, float dbMin, float dbMax)
         filled_ = true;
 }
 
-void Waterfall::draw(const ImVec2& size, float uMin, float uMax)
+void Waterfall::draw(const ImVec2& size, float uMin, float uMax,
+                     float xFracLo, float xFracHi)
 {
     if (!tex_ || size.x <= 1.0f || size.y <= 1.0f)
     {
@@ -118,6 +119,20 @@ void Waterfall::draw(const ImVec2& size, float uMin, float uMax)
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGui::InvisibleButton("##waterfall", size);
 
+    // Black background over the whole panel so margins (when the image is
+    // narrower than the panel, e.g. zoomed out) stay clean rather than showing
+    // stale/stretched texture.
+    dl->AddRectFilled(p0, ImVec2(p0.x + size.x, p0.y + size.y),
+                      IM_COL32(0, 0, 0, 255));
+
+    xFracLo = std::clamp(xFracLo, 0.0f, 1.0f);
+    xFracHi = std::clamp(xFracHi, 0.0f, 1.0f);
+    if (xFracHi <= xFracLo)
+        return; // nothing visible: leave the black background
+
+    float dx0 = p0.x + size.x * xFracLo;
+    float dx1 = p0.x + size.x * xFracHi;
+
     float H = (float)texH_;
     float vSplit = (float)writePtr_ / H; // top slice covers rows [writePtr_..H]
     float topFrac = 1.0f - vSplit;       // fraction of height for top slice
@@ -125,15 +140,15 @@ void Waterfall::draw(const ImVec2& size, float uMin, float uMax)
     ImTextureID tid = (ImTextureID)(intptr_t)tex_;
 
     // Top slice: tex rows [writePtr_ .. texH_-1].
-    ImVec2 a0 = p0;
-    ImVec2 a1 = ImVec2(p0.x + size.x, p0.y + size.y * topFrac);
+    ImVec2 a0 = ImVec2(dx0, p0.y);
+    ImVec2 a1 = ImVec2(dx1, p0.y + size.y * topFrac);
     dl->AddImage(tid, a0, a1, ImVec2(uMin, vSplit), ImVec2(uMax, 1.0f));
 
     // Bottom slice: tex rows [0 .. writePtr_-1].
     if (vSplit > 0.0f)
     {
-        ImVec2 b0 = ImVec2(p0.x, p0.y + size.y * topFrac);
-        ImVec2 b1 = ImVec2(p0.x + size.x, p0.y + size.y);
+        ImVec2 b0 = ImVec2(dx0, p0.y + size.y * topFrac);
+        ImVec2 b1 = ImVec2(dx1, p0.y + size.y);
         dl->AddImage(tid, b0, b1, ImVec2(uMin, 0.0f), ImVec2(uMax, vSplit));
     }
 }

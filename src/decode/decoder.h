@@ -6,8 +6,10 @@
 #include "dsp/ddc.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 struct jaero_pmsk_demod;       // from jaero_demod.h
@@ -15,6 +17,7 @@ struct jaero_oqpsk_cont_demod; // from jaero_demod.h
 struct jaero_acars_msg;        // from jaero_demod.h
 class AmbeDecoder;
 class AudioOutput;
+class WavWriter;
 
 class Decoder
 {
@@ -45,6 +48,12 @@ public:
     bool   isVoice() const { return baud_ == 8400; }
     void   setMonitored(bool on) { monitored_.store(on); }
     bool   monitored() const { return monitored_.load(); }
+
+    // Voice call recording (8400 only). When enabled, each contiguous voice
+    // call is written to its own WAV file in dir, regardless of monitoring.
+    void   setRecording(bool on, const std::string& dir);
+    bool   recordEnabled() const { return record_.load(); }
+    bool   recordingNow() const { return recActive_.load(); }
 
 private:
     static void acarsTrampoline(const uint8_t* data, int len, int channel_id,
@@ -85,4 +94,13 @@ private:
     std::unique_ptr<AmbeDecoder> ambe_; // voice (8400) only
     AudioOutput* audioSink_ = nullptr;
     std::atomic<bool> monitored_{false};
+
+    // Recording state (worker thread only, except the atomics).
+    void maintainRecording();
+    void recordPcm(const int16_t* pcm, int n);
+    std::atomic<bool> record_{false};   // recording requested
+    std::atomic<bool> recActive_{false}; // a call file is currently open
+    std::string recordDir_ = "recordings";
+    std::unique_ptr<WavWriter> rec_;
+    std::chrono::steady_clock::time_point lastVoiceTime_;
 };

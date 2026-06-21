@@ -84,6 +84,10 @@ struct App
     int selectedDecoder = -1;     // channelId shown in the constellation panel
     std::vector<float> constBuf;  // interleaved I,Q scratch for the plot
 
+    // Voice call recording (8400). Saves every decoded call to its own WAV.
+    bool recordVoice = false;
+    char recordDir[256] = "recordings";
+
     // Voice follow: when a C-channel voice assignment appears, hop the SDR to
     // the assigned RX (forward) frequency, decode the 8400 voice call, then hop
     // back to the P-channel home when the call goes idle.
@@ -700,6 +704,14 @@ static void drawSpectrum(App& app)
         // The band is only valid once real frequency data exists (front<back).
         bool bandValid = (app.curN > 0 && app.freqMHz.front() < app.freqMHz.back());
 
+        // Cap zoom-out so the view can never be wider than the captured band
+        // (i.e. the sample rate). z_min stays tiny to allow zooming in.
+        if (bandValid)
+        {
+            double bandSpan = app.freqMHz.back() - app.freqMHz.front();
+            ImPlot::SetupAxisZoomConstraints(ImAxis_X1, bandSpan * 1e-4, bandSpan);
+        }
+
         // Fit X to the full band only on request (start / tune / reset);
         // otherwise leave it alone so the user's pan/zoom persists.
         if (app.resetView && bandValid)
@@ -782,16 +794,34 @@ static void drawWaterfall(App& app)
 {
     ImGui::Begin("Waterfall");
 
-    float uMin = 0.0f, uMax = 1.0f;
+    // Map the captured band to the spectrum's current view so the waterfall
+    // lines up frequency-for-frequency at any zoom. Both the texture UV range
+    // and the on-screen X sub-rectangle follow the visible overlap, so zooming
+    // out (view wider than the band) shrinks the image to the middle instead of
+    // stretching it across the whole panel.
+    float uMin = 0.0f, uMax = 1.0f; // texture sub-range to sample
+    float xLo = 0.0f, xHi = 1.0f;   // screen X fractions to draw it across
     if (app.curN > 0)
     {
         double bandMin = app.freqMHz.front();
         double bandMax = app.freqMHz.back();
-        double span = bandMax - bandMin;
-        if (span > 0.0)
+        double bandSpan = bandMax - bandMin;
+        double viewSpan = app.viewXmaxMHz - app.viewXminMHz;
+        if (bandSpan > 0.0 && viewSpan > 0.0)
         {
-            uMin = (float)std::clamp((app.viewXminMHz - bandMin) / span, 0.0, 1.0);
-            uMax = (float)std::clamp((app.viewXmaxMHz - bandMin) / span, 0.0, 1.0);
+            double visLo = std::max(bandMin, app.viewXminMHz);
+            double visHi = std::min(bandMax, app.viewXmaxMHz);
+            if (visHi > visLo)
+            {
+                uMin = (float)((visLo - bandMin) / bandSpan);
+                uMax = (float)((visHi - bandMin) / bandSpan);
+                xLo = (float)((visLo - app.viewXminMHz) / viewSpan);
+                xHi = (float)((visHi - app.viewXminMHz) / viewSpan);
+            }
+            else
+            {
+                xLo = xHi = 0.0f; // band entirely off-screen: just background
+            }
         }
     }
 
@@ -808,7 +838,7 @@ static void drawWaterfall(App& app)
     }
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + left);
 
-    app.waterfall.draw(ImVec2(w, avail.y), uMin, uMax);
+    app.waterfall.draw(ImVec2(w, avail.y), uMin, uMax, xLo, xHi);
     ImGui::End();
 }
 
@@ -842,6 +872,19 @@ static void drawDecoders(App& app)
     ImGui::SameLine();
     if (ImGui::SmallButton("Listen to selected"))
         app.decoders.setVoiceMonitor(app.selectedDecoder);
+
+    if (ImGui::Checkbox("Record voice calls", &app.recordVoice))
+        app.decoders.setRecording(app.recordVoice, app.recordDir);
+    ImGui::SameLine();
+    if (app.recordVoice)
+        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "REC  (%d active)",
+                           app.decoders.recordingCount());
+    else
+        ImGui::TextDisabled("(saves every 8400 call to its own WAV)");
+    ImGui::BeginDisabled(app.recordVoice);
+    ImGui::SetNextItemWidth(-90.0f);
+    ImGui::InputText("Folder", app.recordDir, sizeof(app.recordDir));
+    ImGui::EndDisabled();
 
     ImGui::Separator();
 

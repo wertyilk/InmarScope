@@ -16,9 +16,12 @@ public:
     void addRow(const float* db, int n, float dbMin, float dbMax);
 
     // Draw filling the given size (use ImGui::GetContentRegionAvail()).
-    // uMin/uMax select the horizontal (frequency) sub-range to show, for
-    // pan/zoom synced to the spectrum (0..1 = full band).
-    void draw(const ImVec2& size, float uMin = 0.0f, float uMax = 1.0f);
+    // uMin/uMax select the horizontal (frequency) texture sub-range to show.
+    // xFracLo/xFracHi place that sub-range across [0,1] of the panel width, so
+    // the image can occupy only part of the panel (e.g. when zoomed out past
+    // the captured band). Area outside [xFracLo,xFracHi] is filled black.
+    void draw(const ImVec2& size, float uMin = 0.0f, float uMax = 1.0f,
+              float xFracLo = 0.0f, float xFracHi = 1.0f);
 
     void clear();
 
