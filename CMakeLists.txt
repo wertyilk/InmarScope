@@ -126,6 +126,11 @@ add_subdirectory(third_party/libacars ${CMAKE_BINARY_DIR}/libacars EXCLUDE_FROM_
 # ---------------------------------------------------------------------------
 add_executable(InmarScope
     src/main.cpp
+    src/signal/processing.cpp
+    src/voice/voice_ops.cpp
+    src/gui/gui_panels.cpp
+    src/session/session.cpp
+    src/state/config.cpp
     src/sdr/rtl_sdr_source.cpp
     src/sdr/hackrf_source.cpp
     src/sdr/wav_file_source.cpp

@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 
@@ -310,6 +311,9 @@ void Decoder::onDecoded(const uint8_t* data, int len)
 {
     if (!suLog_ || len <= 0)
         return;
+    // Fill-in SUs (0x01) are just GES padding — skip them entirely.
+    if (data[0] == 0x01)
+        return;
     DecodedMessage m;
     m.channelId = channelId_;
     m.freqMHz = chanFreqHz_ / 1e6;
@@ -323,12 +327,46 @@ void Decoder::onDecoded(const uint8_t* data, int len)
         std::snprintf(hexbuf, sizeof(hexbuf), "%02X ", data[i]);
         m.hex += hexbuf;
     }
-    suLog_->add(m);
 
     // System-table SUs broadcast the network channel plan -> identify channels.
+    // Decode happens before suLog_->add so we can annotate the SU type text.
     if (netTable_ && len >= 10)
     {
-        if (data[0] == 0x05) // GES Psmc/Rsmc channels
+        if (data[0] == 0x07) // Beam support
+        {
+            logWrite("SU 0x07 hex=%s", m.hex.c_str());
+        }
+        else if (data[0] == 0x30 && len >= 8) // Call progress
+        {
+            uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
+            uint8_t ges = data[4];
+            uint8_t refNo = data[5];
+            uint8_t stat = (len > 6) ? data[6] : 0;
+            char annot[96];
+            std::snprintf(annot, sizeof(annot),
+                "Call progress — AES %06X GES %02X  ref=%02X stat=%02X",
+                aes, ges, refNo, stat);
+            m.text = annot;
+        }
+        else if (data[0] == 0x21 && len >= 8) // Call announcement
+        {
+            uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
+            uint8_t ges = data[4];
+            char annot[96];
+            std::snprintf(annot, sizeof(annot),
+                "Call announcement — AES %06X GES %02X", aes, ges);
+            m.text = annot;
+        }
+        else if (data[0] >= 0x10 && data[0] <= 0x17 && len >= 6) // Log-on SUs
+        {
+            uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
+            uint8_t ges = (len > 4) ? data[4] : 0;
+            char annot[80];
+            std::snprintf(annot, sizeof(annot),
+                "%s — AES %06X GES %02X", suTypeName(data[0]), aes, ges);
+            m.text = annot;
+        }
+        else if (data[0] == 0x05) // GES Psmc/Rsmc channels
         {
             int b3 = data[2];
             uint8_t ges = data[3];
@@ -384,6 +422,19 @@ void Decoder::onDecoded(const uint8_t* data, int len)
                 std::snprintf(lonbuf, sizeof(lonbuf), "%.1fW", 360.0 - lon);
             else
                 std::snprintf(lonbuf, sizeof(lonbuf), "%.1fE", lon);
+
+            // Annotate the SU type text with the decoded satellite + beam info
+            // so the Call Progress tab shows it inline.
+            char sattext[64];
+            std::snprintf(sattext, sizeof(sattext), "Sys table: satellite ID — sat=%d %s  CAC %.4f",
+                          satid, lonbuf, cac1);
+            if (ch2)
+            {
+                size_t n = std::strlen(sattext);
+                std::snprintf(sattext + n, sizeof(sattext) - n, " / %.4f", cac2);
+            }
+            m.text = sattext;
+
             logWrite("SU 0x0C hex=%s", m.hex.c_str());
             logWrite("  satid=%d lon=%.1f  cac1=%d(%.4f) cac2=%d(%.4f)",
                      satid, lon, ch1, cac1, ch2, cac2);
@@ -392,7 +443,44 @@ void Decoder::onDecoded(const uint8_t* data, int len)
             if (ch2)
                 netTable_->addChannel(cac2, "CAC/Psmc2 (P-ch RX)", 0, true, 1200);
         }
+        else if (data[0] >= 0x31 && data[0] <= 0x34 && len >= 10)
+        {
+            // C-channel assignment SU — decode RX/TX frequencies and spot-beam
+            // flags so the Call Progress tab shows useful info inline.
+            uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
+            uint8_t ges = data[4];
+            int b7 = data[6], b8 = data[7], b9 = data[8], b10 = data[9];
+            int chRx = ((b7 & 0x7F) << 8) | b8;
+            int chTx = ((b9 & 0x7F) << 8) | b10;
+            double rxMHz = chRx * 0.0025 + 1510.0;
+            double txMHz = chTx * 0.0025 + 1611.5;
+            bool rxsb = (b7 & 0x80) != 0;
+            bool txsb = (b9 & 0x80) != 0;
+
+            char annot[96];
+            std::snprintf(annot, sizeof(annot),
+                "%s — AES %06X GES %02X  RX %.4f%s  TX %.4f%s",
+                suTypeName(data[0]), aes, ges, rxMHz,
+                rxsb ? " (spot)" : "", txMHz, txsb ? " (spot)" : "");
+            // If the SU already carries decoded ACARS text, keep it too.
+            if (!m.text.empty() && m.text != suTypeName(data[0]))
+            {
+                m.text = annot;
+                m.text += " | ";
+                for (int k = 0; k < len; ++k) if (data[k] >= 0x20 && data[k] < 0x7F) m.text += (char)data[k];
+            }
+            else
+            {
+                m.text = annot;
+            }
+        }
     }
+
+    // Diagnostic: dump every SU type + hex so we can reverse-engineer.
+
+    logWrite("SU %s  hex=%s", suTypeName(data[0]), m.hex.c_str());
+
+    suLog_->add(m);
 }
 
 void Decoder::cassignTrampoline(int, uint8_t type, uint32_t aes_id, uint8_t ges_id,
