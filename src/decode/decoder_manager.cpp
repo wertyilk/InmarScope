@@ -102,7 +102,7 @@ int DecoderManager::addDecoder(double freqHz, int baud, uint32_t aesId)
                 }
                 if (baud == 8400)
                 {
-                    dec->setRecording(recordOn_, recordDir_);
+                    dec->setRecording(recordOn_, recordDir_, recordFmt_);
                     dec->setVoiceAesId(aesId);
                 }
                 return id;
@@ -127,7 +127,7 @@ int DecoderManager::addDecoder(double freqHz, int baud, uint32_t aesId)
     }
     if (baud == 8400)
     {
-        dec->setRecording(recordOn_, recordDir_);
+        dec->setRecording(recordOn_, recordDir_, recordFmt_);
         dec->setVoiceAesId(aesId);
     }
     best->subbands.push_back(std::move(sb));
@@ -182,7 +182,21 @@ void DecoderManager::setRecording(bool on, const std::string& dir)
         for (auto& sb : w->subbands)
             for (auto& d : sb->decoders)
                 if (d->isVoice())
-                    d->setRecording(on, recordDir_);
+                    d->setRecording(on, recordDir_, recordFmt_);
+    }
+}
+
+void DecoderManager::setRecordFormat(RecordFormat fmt)
+{
+    recordFmt_ = fmt;
+    // Push to existing voice decoders so the next call file uses this format.
+    for (auto& w : workers_)
+    {
+        std::lock_guard<std::mutex> lk(w->dMtx);
+        for (auto& sb : w->subbands)
+            for (auto& d : sb->decoders)
+                if (d->isVoice())
+                    d->setRecording(recordOn_, recordDir_, fmt);
     }
 }
 

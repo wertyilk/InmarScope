@@ -138,6 +138,7 @@ struct App
 
     // Voice call recording (8400). Saves every decoded call to its own WAV.
     bool recordVoice = false;
+    int  recordFormat = 0;  // 0 = WAV, 1 = OGG Vorbis
     char recordDir[256] = "recordings";
 
     // Audio output device selection (index into audioDevs; 0 = system default).
@@ -1406,13 +1407,26 @@ static void drawDecoders(App& app)
     }
 
     if (ImGui::Checkbox("Record voice calls", &app.recordVoice))
+    {
         app.decoders.setRecording(app.recordVoice, app.recordDir);
+        app.decodersB.setRecording(app.recordVoice, app.recordDir);
+    }
+    ImGui::SameLine();
+    const char* recFmts[] = {"WAV", "OGG"};
+    ImGui::SetNextItemWidth(70);
+    if (ImGui::Combo("##recfmt", &app.recordFormat, recFmts, 2))
+    {
+        RecordFormat fmt = (app.recordFormat == 1) ? RecordFormat::OGG : RecordFormat::WAV;
+        app.decoders.setRecordFormat(fmt);
+        app.decodersB.setRecordFormat(fmt);
+    }
     ImGui::SameLine();
     if (app.recordVoice)
         ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "REC  (%d active)",
                            app.decoders.recordingCount());
     else
-        ImGui::TextDisabled("(saves every 8400 call to its own WAV)");
+        ImGui::TextDisabled("(saves every 8400 call to its own %s)",
+                            app.recordFormat ? "OGG" : "WAV");
     ImGui::BeginDisabled(app.recordVoice);
     ImGui::SetNextItemWidth(-90.0f);
     ImGui::InputText("Folder", app.recordDir, sizeof(app.recordDir));
@@ -1969,6 +1983,7 @@ static void cfgWriteAll(App& app, ImGuiTextBuffer* buf)
     WI(autoGainB); WF(gainDbB); WI(biasTeeB); WF(ppmB);
     WI(voiceFollow); WF(followHoldSec);
     WI(recordVoice); WS(recordDir);
+    WI(recordFormat);
     WI(acPosOnly);
     WI(showEmptyMsgs);
     WI(outFile); WS(outFilePath); WI(outUdp); WS(outUdpHost); WI(outUdpPort);
@@ -2012,6 +2027,7 @@ static void cfgReadLine(App& app, const char* line)
     RB(autoGainB); RF(gainDbB); RB(biasTeeB); RF(ppmB);
     RB(voiceFollow); RF(followHoldSec);
     RB(recordVoice); RS(recordDir);
+    RI(recordFormat);
     RB(acPosOnly);
     RB(showEmptyMsgs);
     RB(outFile); RS(outFilePath); RB(outUdp); RS(outUdpHost); RI(outUdpPort);
@@ -2187,6 +2203,11 @@ int main(int, char**)
     app.decodersB.audioDevices(); // prime SDR B's device cache for id resolution
     app.decoders.setAudioDevice(app.audioDevice);  // apply persisted audio device
     app.decodersB.setAudioDevice(app.audioDevice);
+    {
+        RecordFormat rf = (app.recordFormat == 1) ? RecordFormat::OGG : RecordFormat::WAV;
+        app.decoders.setRecordFormat(rf);
+        app.decodersB.setRecordFormat(rf);
+    }
     app.verCheck.start("inmarscope", INMARSCOPE_VERSION);
 
     const ImVec4 clear_color = ImVec4(0.06f, 0.07f, 0.09f, 1.0f);

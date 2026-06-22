@@ -422,10 +422,11 @@ void Decoder::onVoice(const uint8_t* frame, int len)
         audioSink_->push(pcm, AmbeDecoder::kPcmSamples);
 }
 
-void Decoder::setRecording(bool on, const std::string& dir)
+void Decoder::setRecording(bool on, const std::string& dir, RecordFormat fmt)
 {
     if (on && !dir.empty())
         recordDir_ = dir;
+    recordFmt_ = fmt;
     record_.store(on);
 }
 
@@ -464,11 +465,14 @@ void Decoder::recordPcm(const int16_t* pcm, int n)
         char ts[32];
         std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tm);
         char name[256];
+        const char* ext = (recordFmt_ == RecordFormat::OGG) ? ".ogg" : ".wav";
         std::string icaoTag = (acTable_ && voiceAesId_) ? "_" + acTable_->icao(voiceAesId_) : "";
-        std::snprintf(name, sizeof(name), "%s/%s_%.4fMHz_ch%d%s.wav",
-                      recordDir_.c_str(), ts, chanFreqHz_ / 1e6, channelId_, icaoTag.c_str());
+        std::snprintf(name, sizeof(name), "%s/%s_%.4fMHz_ch%d%s%s",
+                      recordDir_.c_str(), ts, chanFreqHz_ / 1e6, channelId_,
+                      icaoTag.c_str(), ext);
         if (!rec_)
             rec_ = std::make_unique<WavWriter>();
+        rec_->setFormat(recordFmt_);
         if (!rec_->open(name, 8000, 1))
             return; // couldn't open: stay inactive, try again next frame
         recActive_.store(true);

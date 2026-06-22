@@ -4,6 +4,7 @@
 
 #include "decode/message_log.h"
 #include "dsp/ddc.h"
+#include "voice/wav_writer.h"
 
 #include <atomic>
 #include <chrono>
@@ -61,7 +62,8 @@ public:
 
     // Voice call recording (8400 only). When enabled, each contiguous voice
     // call is written to its own WAV file in dir, regardless of monitoring.
-    void   setRecording(bool on, const std::string& dir);
+    void   setRecording(bool on, const std::string& dir,
+                        RecordFormat fmt = RecordFormat::WAV);
     bool   recordEnabled() const { return record_.load(); }
     bool   recordingNow() const { return recActive_.load(); }
 
@@ -116,6 +118,7 @@ private:
     std::atomic<bool> record_{false};   // recording requested
     std::atomic<bool> recActive_{false}; // a call file is currently open
     std::uint32_t voiceAesId_ = 0;      // AES id of the voice call (for recording tag)
+    RecordFormat recordFmt_ = RecordFormat::WAV;
     std::string recordDir_ = "recordings";
     std::unique_ptr<WavWriter> rec_;
     std::chrono::steady_clock::time_point lastVoiceTime_;

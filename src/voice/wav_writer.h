@@ -1,9 +1,13 @@
-// Minimal PCM WAV file writer (used to save decoded 8400 voice calls).
+// Voice call recording: writes 16-bit PCM to WAV or OGG Vorbis files.
 #pragma once
 
 #include <cstdint>
 #include <cstdio>
 #include <string>
+
+struct ma_encoder; // forward: miniaudio OGG encoder used in the .cpp
+
+enum class RecordFormat { WAV = 0, OGG = 1 };
 
 class WavWriter
 {
@@ -14,21 +18,32 @@ public:
     WavWriter(const WavWriter&) = delete;
     WavWriter& operator=(const WavWriter&) = delete;
 
-    // Create/overwrite a 16-bit PCM WAV. Returns false if the file can't open.
+    void setFormat(RecordFormat fmt) { fmt_ = fmt; }
+
+    // Create/overwrite a 16-bit PCM WAV or OGG Vorbis file.
     bool open(const std::string& path, int sampleRate = 8000, int channels = 1);
 
     // Append interleaved 16-bit samples (count = frames * channels).
     void write(const int16_t* data, int count);
 
-    // Finalize the header and close. Safe to call multiple times.
+    // Finalize and close. Safe to call multiple times.
     void close();
 
-    bool isOpen() const { return f_ != nullptr; }
-    uint32_t dataBytes() const { return dataBytes_; }
+    bool isOpen() const { return isOpen_; }
 
 private:
+    void closeWav();
+    void closeOgg();
+
+    RecordFormat fmt_ = RecordFormat::WAV;
+    bool isOpen_ = false;
+
+    // WAV state
     std::FILE* f_ = nullptr;
     uint32_t dataBytes_ = 0;
     int sampleRate_ = 8000;
     int channels_ = 1;
+
+    // OGG state
+    ma_encoder* ogg_ = nullptr; // allocated in open(), freed in closeOgg()
 };

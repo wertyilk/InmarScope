@@ -79,8 +79,10 @@ public:
     // Voice call recording: every 8400 decoder writes its calls to WAV files
     // (one per call) in dir, independent of which channel is being monitored.
     void setRecording(bool on, const std::string& dir);
+    void setRecordFormat(RecordFormat fmt);
     bool recording() const { return recordOn_; }
     const std::string& recordDir() const { return recordDir_; }
+    RecordFormat recordFormat() const { return recordFmt_; }
     int  recordingCount(); // decoders with a call file currently open
 
 private:
@@ -134,6 +136,7 @@ private:
     int voiceMonitorId_ = -1;
     bool recordOn_ = false;
     std::string recordDir_ = "recordings";
+    RecordFormat recordFmt_ = RecordFormat::WAV;
     bool audioEnabled_ = true;
     int maxWorkers_ = 8;
 };
