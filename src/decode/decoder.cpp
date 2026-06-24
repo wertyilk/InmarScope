@@ -339,31 +339,60 @@ void Decoder::onDecoded(const uint8_t* data, int len)
         else if (data[0] == 0x30 && len >= 8) // Call progress
         {
             uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
+            // For C-channel (8400) decoders the Call_progress SU carries the
+            // aircraft's 24‑bit identity (ICAO / AES) — store it so voice
+            // recordings get tagged with the correct hex.
+            if (baud_ == 8400)
+            {
+                voiceAesId_ = aes;
+                char icaoBuf[8];
+                std::snprintf(icaoBuf, sizeof(icaoBuf), "%06X", aes);
+                if (acTable_)
+                    acTable_->setIcao(aes, icaoBuf, (double)std::time(nullptr));
+            }
             uint8_t ges = data[4];
             uint8_t refNo = data[5];
             uint8_t stat = (len > 6) ? data[6] : 0;
-            char annot[96];
+            std::string icao = acTable_ ? acTable_->icao(aes) : "";
+            char annot[128];
             std::snprintf(annot, sizeof(annot),
-                "Call progress — AES %06X GES %02X  ref=%02X stat=%02X",
-                aes, ges, refNo, stat);
+                "Call progress — AES %06X%s%s  GES %02X  ref=%02X stat=%02X",
+                aes, icao.empty() ? "" : " (", icao.empty() ? "" : icao.c_str(),
+                ges, refNo, stat);
+            if (!icao.empty()) std::strncat(annot, ")", sizeof(annot) - std::strlen(annot) - 1);
             m.text = annot;
         }
-        else if (data[0] == 0x21 && len >= 8) // Call announcement
+        else if (data[0] == 0x21 && len >= 10) // Call announcement — same layout as C-assign
         {
             uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
             uint8_t ges = data[4];
-            char annot[96];
+            int b7 = data[6], b8 = data[7], b9 = data[8], b10 = data[9];
+            int chRx = ((b7 & 0x7F) << 8) | b8;
+            int chTx = ((b9 & 0x7F) << 8) | b10;
+            double rxMHz = chRx * 0.0025 + 1510.0;
+            double txMHz = chTx * 0.0025 + 1611.5;
+            bool rxsb = (b7 & 0x80) != 0;
+            bool txsb = (b9 & 0x80) != 0;
+            std::string icao = acTable_ ? acTable_->icao(aes) : "";
+            char annot[148];
             std::snprintf(annot, sizeof(annot),
-                "Call announcement — AES %06X GES %02X", aes, ges);
+                "Call announcement — AES %06X%s%s  GES %02X  RX %.4f%s  TX %.4f%s",
+                aes, icao.empty() ? "" : " (", icao.empty() ? "" : icao.c_str(),
+                ges, rxMHz, rxsb ? " (spot)" : "", txMHz, txsb ? " (spot)" : "");
+            if (!icao.empty()) std::strncat(annot, ")", sizeof(annot) - std::strlen(annot) - 1);
             m.text = annot;
         }
         else if (data[0] >= 0x10 && data[0] <= 0x17 && len >= 6) // Log-on SUs
         {
             uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
             uint8_t ges = (len > 4) ? data[4] : 0;
-            char annot[80];
+            std::string icao = acTable_ ? acTable_->icao(aes) : "";
+            char annot[128];
             std::snprintf(annot, sizeof(annot),
-                "%s — AES %06X GES %02X", suTypeName(data[0]), aes, ges);
+                "%s — AES %06X%s%s  GES %02X",
+                suTypeName(data[0]), aes,
+                icao.empty() ? "" : " (", icao.empty() ? "" : icao.c_str(), ges);
+            if (!icao.empty()) std::strncat(annot, ")", sizeof(annot) - std::strlen(annot) - 1);
             m.text = annot;
         }
         else if (data[0] == 0x05) // GES Psmc/Rsmc channels
@@ -448,6 +477,14 @@ void Decoder::onDecoded(const uint8_t* data, int len)
             // C-channel assignment SU — decode RX/TX frequencies and spot-beam
             // flags so the Call Progress tab shows useful info inline.
             uint32_t aes = ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
+            if (baud_ == 8400)
+            {
+                voiceAesId_ = aes;
+                char icaoBuf[8];
+                std::snprintf(icaoBuf, sizeof(icaoBuf), "%06X", aes);
+                if (acTable_)
+                    acTable_->setIcao(aes, icaoBuf, (double)std::time(nullptr));
+            }
             uint8_t ges = data[4];
             int b7 = data[6], b8 = data[7], b9 = data[8], b10 = data[9];
             int chRx = ((b7 & 0x7F) << 8) | b8;
@@ -456,12 +493,15 @@ void Decoder::onDecoded(const uint8_t* data, int len)
             double txMHz = chTx * 0.0025 + 1611.5;
             bool rxsb = (b7 & 0x80) != 0;
             bool txsb = (b9 & 0x80) != 0;
+            std::string icao = acTable_ ? acTable_->icao(aes) : "";
 
-            char annot[96];
+            char annot[160];
             std::snprintf(annot, sizeof(annot),
-                "%s — AES %06X GES %02X  RX %.4f%s  TX %.4f%s",
-                suTypeName(data[0]), aes, ges, rxMHz,
-                rxsb ? " (spot)" : "", txMHz, txsb ? " (spot)" : "");
+                "%s — AES %06X%s%s  GES %02X  RX %.4f%s  TX %.4f%s",
+                suTypeName(data[0]), aes,
+                icao.empty() ? "" : " (", icao.empty() ? "" : icao.c_str(),
+                ges, rxMHz, rxsb ? " (spot)" : "", txMHz, txsb ? " (spot)" : "");
+            if (!icao.empty()) std::strncat(annot, ")", sizeof(annot) - std::strlen(annot) - 1);
             // If the SU already carries decoded ACARS text, keep it too.
             if (!m.text.empty() && m.text != suTypeName(data[0]))
             {
@@ -592,7 +632,23 @@ void Decoder::recordPcm(const int16_t* pcm, int n)
         std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tm);
         char name[256];
         const char* ext = (recordFmt_ == RecordFormat::OGG) ? ".ogg" : ".wav";
-        std::string icaoTag = (acTable_ && voiceAesId_) ? "_" + acTable_->icao(voiceAesId_) : "";
+        // Tag the filename with the aircraft identity: ICAO hex if the table
+        // already knows it (from a prior ADS‑C airframe‑ID report), otherwise
+        // fall back to the 24‑bit AES ID. No tag when the AES isn't known
+        // (CallHunter / manual Ctrl‑click).
+        std::string icaoTag;
+        if (acTable_ && voiceAesId_)
+        {
+            std::string i = acTable_->icao(voiceAesId_);
+            if (!i.empty())
+                icaoTag = "_" + i;
+            else
+            {
+                char buf[8];
+                std::snprintf(buf, sizeof(buf), "_%06X", voiceAesId_);
+                icaoTag = buf;
+            }
+        }
         std::snprintf(name, sizeof(name), "%s/%s_%.4fMHz_ch%d%s%s",
                       recordDir_.c_str(), ts, chanFreqHz_ / 1e6, channelId_,
                       icaoTag.c_str(), ext);

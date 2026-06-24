@@ -88,6 +88,7 @@ struct App
 
     int  newBaud = 1;
     bool placingDecoder = false;
+    bool placingVoiceView = false; // true = started on voice SDR, false = primary
     double placingFreqMHz = 0.0;
     int  selectedDecoder = -1;
     std::vector<float> constBuf;

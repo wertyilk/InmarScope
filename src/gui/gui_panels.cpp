@@ -549,6 +549,7 @@ void drawSpectrum(App& app, SpectrumView& v, DecoderManager& mgr, const char* ti
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 app.placingDecoder = true;
+                app.placingVoiceView = voiceView;
                 app.placingFreqMHz = mp.x;
             }
             if (app.placingDecoder)
@@ -570,9 +571,9 @@ void drawSpectrum(App& app, SpectrumView& v, DecoderManager& mgr, const char* ti
                 mgr.addDecoder(mp.x * 1e6, baud);
             }
         }
-        else if (app.placingDecoder)
+        else if (app.placingDecoder && app.placingVoiceView == voiceView)
         {
-            // Ctrl released or cursor left the plot: cancel placing.
+            // Ctrl released or cursor left the plot that started the placement.
             app.placingDecoder = false;
         }
 

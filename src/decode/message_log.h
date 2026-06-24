@@ -302,6 +302,19 @@ public:
         byId_.clear();
     }
 
+    // Quick ICAO-only update from a C-channel data SU (no position/flight).
+    void setIcao(uint32_t aesId, const std::string& icao, double nowSec)
+    {
+        if (aesId == 0 || icao.empty())
+            return;
+        std::lock_guard<std::mutex> lk(mtx_);
+        AircraftEntry& e = byId_[aesId];
+        e.aesId = aesId;
+        e.icao = icao;
+        if (e.lastSeen < nowSec)
+            e.lastSeen = nowSec;
+    }
+
     std::string icao(uint32_t aesId) const
     {
         std::lock_guard<std::mutex> lk(mtx_);
