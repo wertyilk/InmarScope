@@ -97,7 +97,7 @@ Decoder::Decoder(double subRate, double subCenterHz, double chanFreqHz, int baud
 {
     if (baud == kEgcBaud)
     {
-        egc_ = std::make_unique<EgcDecoder>(channelId, chanFreqHz / 1e6, egcLog_);
+        egc_ = std::make_unique<EgcDecoder>(channelId, chanFreqHz / 1e6, ddc_.outputRate(), egcLog_);
     }
     else if (baud == 10500 || baud == 8400)
     {

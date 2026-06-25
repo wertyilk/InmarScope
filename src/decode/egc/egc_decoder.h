@@ -14,7 +14,7 @@ class EgcLog;
 class EgcDecoder
 {
 public:
-    EgcDecoder(int channelId, double freqMHz, EgcLog* log);
+    EgcDecoder(int channelId, double freqMHz, double sampleRate, EgcLog* log);
     ~EgcDecoder();
 
     // Feed a block of 48 kHz complex baseband (interleaved double I,Q).

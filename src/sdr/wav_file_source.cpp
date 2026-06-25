@@ -1,5 +1,6 @@
 #include "sdr/wav_file_source.h"
 
+#include "util/log.h"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -92,6 +93,9 @@ bool WavFileSource::start(int, SdrSampleCb cb, std::string& err)
         err = "Unsupported WAV (need 8/16-bit, 1/2 ch)";
         return false;
     }
+
+    logWrite("[wav] opened %dch %d-bit %g Hz",
+             channels_, bits_, sampleRate_);
 
     // SDR captures often exceed 4 GB, where the 32-bit data-chunk size field
     // is truncated/bogus. Use the actual remaining file length instead.

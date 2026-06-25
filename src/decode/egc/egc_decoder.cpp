@@ -1,6 +1,7 @@
 // Inmarsat-C / EGC decoder implementation. Ported from scytaleC (GPL-3.0).
 #include "decode/egc/egc_decoder.h"
 #include "decode/message_log.h"
+#include "util/log.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,12 +25,12 @@ constexpr int    kUWFrameLen = 10368;
 class RDemodulator
 {
 public:
-    RDemodulator()
+    RDemodulator(double sampleRate)
     {
-        wcarrier = (2 * M_PI * kCenterFreq) / kSampleRate;
-        wclock = (2 * M_PI * kSymbolRate) / kSampleRate;
-        lowerafclimit = (1800 * M_PI) / kSampleRate;
-        upperafclimit = (4600 * M_PI) / kSampleRate;
+        wcarrier = (2 * M_PI * kCenterFreq) / sampleRate;
+        wclock = (2 * M_PI * kSymbolRate) / sampleRate;
+        lowerafclimit = (1800 * M_PI) / sampleRate;
+        upperafclimit = (4600 * M_PI) / sampleRate;
         a_.resize(order);
         isb_.assign(order, 0.0);
         qsb_.assign(order, 0.0);
@@ -414,8 +415,10 @@ std::string ia5Text(const uint8_t* p, int n)
 
 struct EgcDecoder::Impl
 {
+    Impl(double sRate) : demod(sRate), fs(sRate) {}
     int channelId;
     double freqMHz;
+    double fs;
     EgcLog* log;
     double mixPhase = 0.0;
     RDemodulator demod;
@@ -457,6 +460,10 @@ struct EgcDecoder::Impl
         else if (payLen > 0) m.text = "(presentation " + std::to_string(pres) + ", " +
                                       std::to_string(payLen) + " bytes)";
         ++messageCount;
+        logWrite("[EGC] ch%d fr=%d t=%s svc=%s pri=%s mid=%d len=%d text='%s'",
+                 channelId, curFrameNo, curTime.c_str(), serviceName(mt),
+                 priorityName(priority), msgId, payLen,
+                 m.text.empty() ? "(binary)" : m.text.c_str());
         if (log) log->add(m);
     }
 
@@ -501,13 +508,13 @@ struct EgcDecoder::Impl
             }
             else if (d == 0xBE && ok && mfaActive)
             {
-                int cnt = plen - 4;
+                int cnt = plen - 2; // include the CRC bytes
                 if (cnt > 0 && mfaFilled + cnt <= (int)mfaData.size())
                 {
                     std::memcpy(&mfaData[mfaFilled], &f[pos + 2], cnt);
                     mfaFilled += cnt;
                 }
-                if (mfaFilled == mfaExpected - 2)
+                if (mfaFilled == mfaExpected)
                 {
                     uint8_t ed = mfaData[0];
                     int ep = packetLength(mfaData.data(), 0, mfaExpected);
@@ -521,8 +528,8 @@ struct EgcDecoder::Impl
     }
 };
 
-EgcDecoder::EgcDecoder(int channelId, double freqMHz, EgcLog* log)
-    : p_(new Impl)
+EgcDecoder::EgcDecoder(int channelId, double freqMHz, double sampleRate, EgcLog* log)
+    : p_(new Impl(sampleRate))
 {
     p_->channelId = channelId;
     p_->freqMHz = freqMHz;
@@ -538,7 +545,7 @@ void EgcDecoder::process(const double* iq48, int nComplex)
     // magnitude so the demod's lock detector behaves like scytaleC).
     p_->realBuf.clear();
     p_->realBuf.reserve(nComplex);
-    const double inc = 2 * M_PI * kCenterFreq / kSampleRate;
+    const double inc = 2 * M_PI * kCenterFreq / p_->fs;
     for (int i = 0; i < nComplex; ++i)
     {
         double I = iq48[i * 2], Q = iq48[i * 2 + 1];
