@@ -862,12 +862,26 @@ void drawDecoders(App& app)
             if (d.baud == kEgcBaud)
             {
                 if (d.egcFrames > 0)
-                    ImGui::Text("BER %d (%dfr)", d.egcBer, d.egcFrames);
+                {
+                    ImVec4 berCol = d.egcBer < 0  ? ImVec4(0.5f, 0.5f, 0.5f, 1.0f)
+                                  : d.egcBer <= 10 ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f)
+                                  : d.egcBer <= 50 ? ImVec4(1.0f, 0.85f, 0.2f, 1.0f)
+                                                   : ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+                    ImGui::TextColored(berCol, "BER %d (%dfr)", d.egcBer, d.egcFrames);
+                }
                 else
                     ImGui::TextDisabled("--");
             }
             else
-                ImGui::Text("%.1f", d.ebno);
+            {
+                double loRed, hiGreen;
+                if (d.baud == 600 || d.baud == 1200) { loRed = 5.0; hiGreen = 8.0; }
+                else                                 { loRed = 4.0; hiGreen = 6.0; }
+                ImVec4 ebCol = d.ebno < loRed  ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f)
+                             : d.ebno < hiGreen ? ImVec4(1.0f, 0.85f, 0.2f, 1.0f)
+                                                : ImVec4(0.2f, 1.0f, 0.3f, 1.0f);
+                ImGui::TextColored(ebCol, "%.1f", d.ebno);
+            }
             ImGui::TableNextColumn();
             ImGui::Text("%llu", (unsigned long long)d.msgs);
             ImGui::TableNextColumn();
