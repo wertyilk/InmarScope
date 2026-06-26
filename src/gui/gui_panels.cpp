@@ -1503,10 +1503,6 @@ void drawLes(App& app)
         {
             if (hideEncrypted && it->isEncrypted) continue;
             ImGui::TableNextRow();
-            if (it->isEncrypted)
-                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(80, 20, 20, 255));
-            else
-                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(20, 80, 20, 255));
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(it->timeUtc.c_str());
             ImGui::TableNextColumn();
@@ -1518,7 +1514,12 @@ void drawLes(App& app)
             ImGui::TableNextColumn();
             ImGui::Text("%d", it->pktNo);
             ImGui::TableNextColumn();
+            if (it->isEncrypted)
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 60, 60, 255));
+            else
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(60, 255, 60, 255));
             ImGui::TextWrapped("%s", it->text.c_str());
+            ImGui::PopStyleColor();
         }
         ImGui::EndTable();
     }
