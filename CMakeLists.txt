@@ -159,6 +159,8 @@ add_executable(InmarScope
     src/voice/ambe_decoder.cpp
     src/voice/wav_writer.cpp
     src/audio/audio_output.cpp
+    src/audio/audio_player.cpp
+    src/audio/miniaudio_impl.cpp
     src/output/message_feed.cpp
     src/update/version_check.cpp
     src/web/flight_map_webview.cpp

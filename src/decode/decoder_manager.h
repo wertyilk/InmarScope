@@ -71,6 +71,7 @@ public:
     LesLog& lesLog() { return lesLog_; }
     AircraftTable& aircraftTable() { return acTable_; }
     const AircraftTable& aircraftTable() const { return acTable_; }
+    VoiceCallLog& voiceCallLog() { return voiceCallLog_; }
 
     // Voice: route one 8400 decoder's audio to the speakers.
     void setVoiceMonitor(int channelId);
@@ -147,6 +148,7 @@ private:
     MesLog mesLog_;
     LesLog lesLog_;
     AircraftTable acTable_;
+    VoiceCallLog voiceCallLog_;
     AudioOutput audio_;
     int voiceMonitorId_ = -1;
     bool recordOn_ = false;

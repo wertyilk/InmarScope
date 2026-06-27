@@ -3,6 +3,9 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
 #include <map>
 #include <mutex>
 #include <string>
@@ -440,4 +443,84 @@ public:
 private:
     mutable std::mutex mtx_;
     std::map<uint32_t, AircraftEntry> byId_;
+};
+
+// A recorded voice call, either live (recording==true) or completed.
+struct VoiceCallRecord
+{
+    double timeSec = 0.0;        // epoch of call start
+    double durationSec = 0.0;    // 0 if still live
+    double freqMHz = 0.0;
+    int channelId = -1;
+    uint32_t aesId = 0;
+    std::string icao;
+    std::string filename;        // just the filename, no directory
+    bool recording = false;      // true = live call in progress
+};
+
+class VoiceCallLog
+{
+public:
+    void add(const VoiceCallRecord& r)
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        items_.push_back(r);
+        if (items_.size() > kMax)
+            items_.erase(items_.begin(), items_.begin() + (items_.size() - kMax));
+        ++count_;
+    }
+
+    // Called when a live recording ends: finds the entry by channelId and fills
+    // in the duration + filename. If not found, adds a new completed record.
+    void updateEnd(int channelId, double durationSec, const std::string& filename)
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        for (auto it = items_.rbegin(); it != items_.rend(); ++it)
+        {
+            if (it->channelId == channelId && it->recording)
+            {
+                it->recording = false;
+                it->durationSec = durationSec;
+                if (!filename.empty())
+                {
+                    // Extract just the filename from the full path.
+                    const char* s = filename.c_str();
+                    const char* slash = std::strrchr(s, '/');
+#ifdef _WIN32
+                    const char* bslash = std::strrchr(s, '\\');
+                    if (bslash && bslash > slash) slash = bslash;
+#endif
+                    it->filename = slash ? (slash + 1) : s;
+                }
+                return;
+            }
+        }
+    }
+
+    // Scan a directory for existing WAV/OGG files and populate.
+    void scanDir(const std::string& dir);
+
+    std::vector<VoiceCallRecord> snapshot()
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        return items_;
+    }
+
+    uint64_t count()
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        return count_;
+    }
+
+    void clear()
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        items_.clear();
+    }
+
+private:
+    static constexpr size_t kMax = 500;
+    std::mutex mtx_;
+    std::vector<VoiceCallRecord> items_;
+    uint64_t count_ = 0;
 };

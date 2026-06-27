@@ -40,6 +40,7 @@ void cfgWriteAll(App& app, ImGuiTextBuffer* buf)
     WI(sourceMode); WI(deviceIndex); WI(sampleRateIdx); WI(newBaud); WI(fftSizeIdx);
     WI(audioDevice); WI(voiceMuted); WI(cpuReduce);
     WD(centerFreqMHz);
+    WF(iqBufferSec);
     WI(autoGain); WF(gainDb); WI(biasTee); WF(ppm); WI(dcBlock);
     WI(autoScale); WI(bandBrowse); WF(avgAlpha); WF(dbMin); WF(dbMax);
     WF(browseEdgePct); WF(browseThrottleMs); WF(browseMinMovePct);
@@ -100,6 +101,7 @@ void cfgReadLine(App& app, const char* line)
     RI(sourceMode); RI(deviceIndex); RI(sampleRateIdx); RI(newBaud); RI(fftSizeIdx);
     RI(audioDevice); RB(voiceMuted); RB(cpuReduce);
     RD(centerFreqMHz);
+    RF(iqBufferSec);
     RB(autoGain); RF(gainDb); RB(biasTee); RF(ppm); RB(dcBlock);
     RB(autoScale); RB(bandBrowse); RF(avgAlpha); RF(dbMin); RF(dbMax);
     RF(browseEdgePct); RF(browseThrottleMs); RF(browseMinMovePct);

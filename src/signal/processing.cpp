@@ -146,6 +146,7 @@ void updateRateChange(App& app)
     for (auto& k : keep)
         app.decoders.addDecoder(k.first * 1e6, k.second);
     app.lastConfiguredFs = fs;
+    app.iqRecorder.configurePrebuffer(fs, app.iqBufferSec);
     app.viewA.resetView = true;
     if (app.viewA.curN > 0)
         updateFreqAxis(app.viewA, center, fs, app.viewA.curN);

@@ -12,6 +12,7 @@
 #include "sdr/wav_file_source.h"
 #include "sdr/sdrpp_server_source.h"
 #include "sdr/iq_recorder.h"
+#include "audio/audio_player.h"
 #include "decode/band_plan.h"
 #include "decode/decoder_manager.h"
 #include "output/message_feed.h"
@@ -133,11 +134,13 @@ struct App
     // IQ recorder
     IqRecorder iqRecorder;
     char iqRecPath[512] = "iq_record.wav";
+    float iqBufferSec = 10.0f;  // IQ pre-buffer seconds (0 = disabled)
 
     int  audioDevice = 0;
     bool voiceMuted = false;
     bool cpuReduce = false;
     bool showAbout = false;
+    AudioPlayer audioPlayer;
     std::vector<std::string> audioDevs;
 
     // Output
@@ -241,4 +244,4 @@ constexpr const char* kFftLabels[] = {"1024", "2048", "4096", "8192", "16384", "
 constexpr int kNumFftSizes = (int)(sizeof(kFftSizes) / sizeof(kFftSizes[0]));
 
 // Dock layout version: bump when the built-in default layout changes.
-constexpr int kLayoutVersion = 10;
+constexpr int kLayoutVersion = 11;

@@ -685,6 +685,7 @@ void Decoder::recordPcm(const int16_t* pcm, int n)
             return;
         }
         recActive_.store(true);
+        recordingPath_ = name;
         // Flush buffered PCM (if any) then clear the buffer.
         if (!pcmBuf_.empty())
         {

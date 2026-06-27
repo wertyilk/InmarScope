@@ -71,6 +71,7 @@ public:
                         RecordFormat fmt = RecordFormat::WAV);
     bool   recordEnabled() const { return record_.load(); }
     bool   recordingNow() const { return recActive_.load(); }
+    const std::string& recordingPath() const { return recordingPath_; }
 
 private:
     static void acarsTrampoline(const uint8_t* data, int len, int channel_id,
@@ -129,4 +130,5 @@ private:
     std::chrono::steady_clock::time_point lastVoiceTime_;
     std::chrono::steady_clock::time_point firstPcmTime_;
     std::vector<int16_t> pcmBuf_;       // buffer early PCM before ICAO known
+    std::string recordingPath_;         // full path of the current recording file
 };

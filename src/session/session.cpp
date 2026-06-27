@@ -86,6 +86,7 @@ void startActive(App& app)
     auto cb = [ring, mgr, iqr](const float* iq, int n) {
         ring->push(iq, (size_t)n);
         mgr->feed(iq, n);
+        iqr->prebuffer(iq, n);
         if (iqr->isRecording())
             iqr->write(iq, n);
     };
@@ -191,6 +192,7 @@ void startActive(App& app)
             auto cbB = [ringB, mgrB, iqr](const float* iq, int n) {
                 ringB->push(iq, (size_t)n);
                 mgrB->feed(iq, n);
+                iqr->prebuffer(iq, n);
                 if (iqr->isRecording())
                     iqr->write(iq, n);
             };
@@ -222,6 +224,7 @@ void startActive(App& app)
             app.decoders.setMaxWorkers(4); // cap primary workers in dual mode (B gets 2)
         app.decoders.start();
         app.lastConfiguredFs = app.active->sampleRate();
+        app.iqRecorder.configurePrebuffer(app.active->sampleRate(), app.iqBufferSec);
         // Don't auto-follow assignments left over from a previous session.
         app.followSeenCount = app.decoders.cassignLog().count();
         app.following = false;

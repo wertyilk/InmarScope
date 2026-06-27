@@ -657,6 +657,36 @@ void drawControls(App& app)
     {
         ImGui::SetNextItemWidth(-70.0f);
         ImGui::InputText("IQ file", app.iqRecPath, sizeof(app.iqRecPath));
+        // Pre-buffer slider (disabled above 3 Msps)
+        double fs = app.active->running() ? app.active->sampleRate() : 0.0;
+        if (!app.active->running())
+            ImGui::BeginDisabled();
+        bool overLimit = (fs > 3.0e6);
+        if (overLimit)
+            ImGui::BeginDisabled();
+        if (ImGui::SliderFloat("Pre-buffer (s)", &app.iqBufferSec, 0.0f, 60.0f, "%.0f"))
+        {
+            app.iqRecorder.configurePrebuffer(fs, app.iqBufferSec);
+        }
+        if (overLimit)
+        {
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::TextDisabled("(disabled > 3 Msps)");
+        }
+        else if (app.iqBufferSec > 0.0f && fs > 0.0)
+        {
+            size_t bytes = (size_t)(fs * app.iqBufferSec * 2 * sizeof(float));
+            char mem[32];
+            if (bytes >= 1024 * 1024 * 1024)
+                std::snprintf(mem, sizeof(mem), "(~%.1f GB)", (double)bytes / (1024.0 * 1024.0 * 1024.0));
+            else
+                std::snprintf(mem, sizeof(mem), "(~%.0f MB)", (double)bytes / (1024.0 * 1024.0));
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", mem);
+        }
+        if (!app.active->running())
+            ImGui::EndDisabled();
         bool iqRec = app.iqRecorder.isRecording();
         if (iqRec)
         {
@@ -1910,6 +1940,124 @@ void drawConstellation(App& app)
 }
 
 // ---------------------------------------------------------------------------
+// Voice Calls browser
+// ---------------------------------------------------------------------------
+
+void drawVoiceCalls(App& app)
+{
+    ImGui::Begin("Voice Calls");
+
+    auto calls = app.decoders.voiceCallLog().snapshot();
+    if (app.dualMode)
+    {
+        auto b = app.decodersB.voiceCallLog().snapshot();
+        calls.insert(calls.end(), b.begin(), b.end());
+    }
+    // Sort newest first
+    std::sort(calls.begin(), calls.end(),
+              [](const VoiceCallRecord& a, const VoiceCallRecord& b) { return a.timeSec > b.timeSec; });
+
+    ImGui::Text("%llu calls", (unsigned long long)app.decoders.voiceCallLog().count() +
+                               (app.dualMode ? app.decodersB.voiceCallLog().count() : 0));
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear"))
+    {
+        app.decoders.voiceCallLog().clear();
+        if (app.dualMode) app.decodersB.voiceCallLog().clear();
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Rescan"))
+    {
+        app.decoders.voiceCallLog().scanDir(app.recordDir);
+        if (app.dualMode) app.decodersB.voiceCallLog().scanDir(app.recordDir);
+    }
+    ImGui::SameLine();
+
+    // Playback status
+    if (app.audioPlayer.isPlaying())
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.4f, 1.0f), "  Playing... %.0fs", (double)app.audioPlayer.positionSec());
+    else
+        ImGui::TextDisabled("  Idle");
+
+    if (ImGui::BeginTable("##vclist", 5,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                          ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable))
+    {
+        ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed, 68);
+        ImGui::TableSetupColumn("Freq", ImGuiTableColumnFlags_WidthFixed, 78);
+        ImGui::TableSetupColumn("ICAO", ImGuiTableColumnFlags_WidthFixed, 64);
+        ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_WidthFixed, 72);
+        ImGui::TableSetupColumn(">");
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableHeadersRow();
+
+        for (auto& c : calls)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            // Time
+            time_t t = (time_t)c.timeSec;
+            std::tm tm{};
+#if defined(_WIN32)
+            localtime_s(&tm, &t);
+#else
+            localtime_r(&t, &tm);
+#endif
+            ImGui::Text("%02d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("%.4f", c.freqMHz);
+
+            ImGui::TableNextColumn();
+            if (!c.icao.empty())
+                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%s", c.icao.c_str());
+            else if (c.aesId)
+                ImGui::TextDisabled("%06X", c.aesId);
+            else
+                ImGui::TextUnformatted("--");
+
+            ImGui::TableNextColumn();
+            // Duration
+            if (c.recording)
+            {
+                double nowSec = (double)std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                double liveDur = (nowSec > c.timeSec) ? (nowSec - c.timeSec) : 0.0;
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Rec %.0fs", liveDur);
+            }
+            else if (c.durationSec > 0.0)
+            {
+                int m = (int)c.durationSec / 60;
+                int s = (int)c.durationSec % 60;
+                ImGui::Text("%d:%02d", m, s);
+            }
+            else
+                ImGui::TextUnformatted("--");
+
+            ImGui::TableNextColumn();
+            // Play button — use unique ID from filename content, not its pointer
+            bool sel = app.audioPlayer.isPlaying() && !c.filename.empty() &&
+                       app.audioPlayer.currentPath().find(c.filename) != std::string::npos;
+            int uid = c.channelId >= 0 ? c.channelId : (int)std::hash<std::string>{}(c.filename) & 0x7FFFFFFF;
+            char label[24];
+            std::snprintf(label, sizeof(label), "%s##vcp%d", sel ? "||" : ">", uid);
+            if (ImGui::SmallButton(label))
+            {
+                if (sel)
+                    app.audioPlayer.stop();
+                else if (!c.filename.empty())
+                {
+                    std::string fullPath = std::string(app.recordDir) + "/" + c.filename;
+                    app.audioPlayer.play(fullPath);
+                }
+            }
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::End();
+}
+
+// ---------------------------------------------------------------------------
 // About dialog
 // ---------------------------------------------------------------------------
 
@@ -2016,6 +2164,7 @@ void drawDockHost(App& app)
         ImGui::DockBuilderDockWindow("MES", rbot);
         ImGui::DockBuilderDockWindow("LES", rbot);
         ImGui::DockBuilderDockWindow("Aircraft", rbot);
+        ImGui::DockBuilderDockWindow("Voice Calls", rbot);
         ImGui::DockBuilderDockWindow("Constellation", rcon);
         ImGui::DockBuilderFinish(dockId);
     }

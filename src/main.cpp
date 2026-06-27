@@ -140,6 +140,7 @@ int main(int, char**)
         app.bandPlanLoaded = loadBandPlan(app.bandPlanPaths[app.bandPlanIdx]);
     if (app.bandPlanIdxB >= 0 && app.bandPlanIdxB < (int)app.bandPlanPaths.size())
         app.bandPlanLoadedB = loadBandPlan(app.bandPlanPaths[app.bandPlanIdxB]);
+    app.decoders.voiceCallLog().scanDir(app.recordDir);
 #if defined(_WIN32)
     app.flightMapWv.init(glfwGetWin32Window(window));
 #endif
@@ -206,9 +207,25 @@ int main(int, char**)
         drawMes(app);
         drawLes(app);
         drawAircraft(app);
+        drawVoiceCalls(app);
         drawFlightMap(app);
         drawConstellation(app);
         drawAbout(app);
+
+        // Auto-mute live audio during playback, restore after
+        static bool wasPlaying = false;
+        bool isPlaying = app.audioPlayer.isPlaying();
+        if (isPlaying && !wasPlaying)
+        {
+            app.decoders.setVoiceMute(true);
+            app.decodersB.setVoiceMute(true);
+        }
+        else if (!isPlaying && wasPlaying)
+        {
+            app.decoders.setVoiceMute(app.voiceMuted);
+            app.decodersB.setVoiceMute(app.voiceMuted);
+        }
+        wasPlaying = isPlaying;
 
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
