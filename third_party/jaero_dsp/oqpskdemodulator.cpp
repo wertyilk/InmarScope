@@ -60,7 +60,7 @@ OqpskDemodulator::OqpskDemodulator()
     bbcycbuff_ptr = 0;
     bbtmpbuff.resize(bbnfft, cpx_type(0, 0));
 
-    agc = new AGC(1, Fs);
+    agc = new AGC(4, Fs);
 
     ebnomeasure = new OQPSKEbNoMeasure((int)(0.5 * Fs), Fs, fb);
 
@@ -227,7 +227,7 @@ void OqpskDemodulator::setSettings(Settings s)
     mixer2.SetFreq(freq_center, Fs);
 
     delete agc;
-    agc = new AGC(1, Fs);
+    agc = new AGC(4, Fs);
 
     pointbuff.assign(300, cpx_type(0, 0));
     pointbuff_ptr = 0;
