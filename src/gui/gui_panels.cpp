@@ -2041,6 +2041,7 @@ void drawVoiceCalls(App& app)
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableHeadersRow();
 
+        int rowIdx = 0;
         for (auto& c : calls)
         {
             ImGui::TableNextRow();
@@ -2084,12 +2085,11 @@ void drawVoiceCalls(App& app)
                 ImGui::TextUnformatted("--");
 
             ImGui::TableNextColumn();
-            // Play button — use unique ID from filename content, not its pointer
+            // Play button — use row index for unique ImGui ID across A/B merge.
             bool sel = app.audioPlayer.isPlaying() && !c.filename.empty() &&
                        app.audioPlayer.currentPath().find(c.filename) != std::string::npos;
-            int uid = c.channelId >= 0 ? c.channelId : (int)std::hash<std::string>{}(c.filename) & 0x7FFFFFFF;
             char label[24];
-            std::snprintf(label, sizeof(label), "%s##vcp%d", sel ? "||" : ">", uid);
+            std::snprintf(label, sizeof(label), "%s##vcp%d", sel ? "||" : ">", rowIdx);
             if (ImGui::SmallButton(label))
             {
                 if (sel)
@@ -2100,6 +2100,7 @@ void drawVoiceCalls(App& app)
                     app.audioPlayer.play(fullPath);
                 }
             }
+            rowIdx++;
         }
         ImGui::EndTable();
     }

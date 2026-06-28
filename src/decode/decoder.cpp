@@ -80,7 +80,7 @@ Decoder::Decoder(double subRate, double subCenterHz, double chanFreqHz, int baud
                  int channelId, MessageLog* log, MessageLog* suLog, AudioOutput* audioSink,
                  CassignLog* cassignLog, ChannelTable* netTable, EgcLog* egcLog,
                  AircraftTable* acTable, MesLog* mesLog, LesLog* lesLog,
-                 LesFreqTable* lesFreqTable)
+                 LesFreqTable* lesFreqTable, VoiceCallLog* voiceCallLog)
     : ddc_(subRate, chanFreqHz - subCenterHz, ddcRate(baud), ddcBw(baud)),
       log_(log),
       suLog_(suLog),
@@ -92,7 +92,8 @@ Decoder::Decoder(double subRate, double subCenterHz, double chanFreqHz, int baud
       baud_(baud),
       channelId_(channelId),
       audioSink_(audioSink),
-      egcLog_(egcLog)
+      egcLog_(egcLog),
+      voiceCallLog_(voiceCallLog)
 {
     if (baud == kEgcBaud)
     {
@@ -688,6 +689,16 @@ void Decoder::recordPcm(const int16_t* pcm, int n)
         }
         recActive_.store(true);
         recordingPath_ = name;
+        if (voiceCallLog_)
+        {
+            std::string icaoStr;
+            if (acTable_ && voiceAesId_)
+                icaoStr = acTable_->icao(voiceAesId_);
+            voiceCallLog_->add({(double)std::chrono::system_clock::to_time_t(
+                                   std::chrono::system_clock::now()),
+                               0.0, chanFreqHz_ / 1e6, channelId_,
+                               voiceAesId_, icaoStr, name, true});
+        }
         // Flush buffered PCM (if any) then clear the buffer.
         if (!pcmBuf_.empty())
         {

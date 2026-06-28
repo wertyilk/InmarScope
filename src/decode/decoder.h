@@ -35,7 +35,8 @@ public:
             CassignLog* cassignLog, ChannelTable* netTable, EgcLog* egcLog = nullptr,
             AircraftTable* acTable = nullptr,
             MesLog* mesLog = nullptr, LesLog* lesLog = nullptr,
-            LesFreqTable* lesFreqTable = nullptr);
+            LesFreqTable* lesFreqTable = nullptr,
+            VoiceCallLog* voiceCallLog = nullptr);
     ~Decoder();
 
     // Process a block of sub-band interleaved double IQ (decode thread).
@@ -120,6 +121,9 @@ private:
 
     std::unique_ptr<EgcDecoder> egc_; // Inmarsat-C / EGC only
     EgcLog* egcLog_ = nullptr;
+
+    // Voice call log — entry added on first voice PCM (not at decoder creation).
+    VoiceCallLog* voiceCallLog_ = nullptr;
 
     // Recording state (worker thread only, except the atomics).
     void maintainRecording();

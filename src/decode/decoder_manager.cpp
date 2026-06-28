@@ -148,7 +148,7 @@ int DecoderManager::addDecoder(double freqHz, int baud, uint32_t aesId)
         {
             if (sb != bestSb) continue;
             Decoder* dec = sb->decoders.emplace_back(std::make_shared<Decoder>(
-                sb->subRate, sb->centerHz, freqHz, baud, id, &log_, &suLog_, &audio_, &cassign_, &netTable_, &egcLog_, &acTable_, &mesLog_, &lesLog_, &lesFreqTable_)).get();
+                sb->subRate, sb->centerHz, freqHz, baud, id, &log_, &suLog_, &audio_, &cassign_, &netTable_, &egcLog_, &acTable_, &mesLog_, &lesLog_, &lesFreqTable_, &voiceCallLog_)).get();
             bestW->count.fetch_add(1);
             bestW->weight.fetch_add(decoderWeight(baud));
             if (baud == 8400 && voiceMonitorId_ < 0)
@@ -160,9 +160,6 @@ int DecoderManager::addDecoder(double freqHz, int baud, uint32_t aesId)
             {
                 dec->setRecording(recordOn_, recordDir_, recordFmt_);
                 dec->setVoiceAesId(aesId);
-                voiceCallLog_.add({(double)std::chrono::system_clock::to_time_t(
-                                      std::chrono::system_clock::now()),
-                                  0.0, freqHz / 1e6, id, aesId, "", "", true});
             }
             return id;
         }
@@ -182,7 +179,7 @@ int DecoderManager::addDecoder(double freqHz, int baud, uint32_t aesId)
     std::lock_guard<std::mutex> lk(best->dMtx);
     auto sb = std::make_shared<SubBand>(Fs_, centerHz_, freqHz, kSubRateTarget, kSubBW);
     Decoder* dec = sb->decoders.emplace_back(std::make_shared<Decoder>(
-        sb->subRate, sb->centerHz, freqHz, baud, id, &log_, &suLog_, &audio_, &cassign_, &netTable_, &egcLog_, &acTable_, &mesLog_, &lesLog_, &lesFreqTable_)).get();
+        sb->subRate, sb->centerHz, freqHz, baud, id, &log_, &suLog_, &audio_, &cassign_, &netTable_, &egcLog_, &acTable_, &mesLog_, &lesLog_, &lesFreqTable_, &voiceCallLog_)).get();
     if (baud == 8400 && voiceMonitorId_ < 0)
     {
         dec->setMonitored(true);
@@ -192,9 +189,6 @@ int DecoderManager::addDecoder(double freqHz, int baud, uint32_t aesId)
     {
         dec->setRecording(recordOn_, recordDir_, recordFmt_);
         dec->setVoiceAesId(aesId);
-        voiceCallLog_.add({(double)std::chrono::system_clock::to_time_t(
-                              std::chrono::system_clock::now()),
-                          0.0, freqHz / 1e6, id, aesId, "", "", true});
     }
     best->subbands.push_back(std::move(sb));
     best->count.fetch_add(1);
