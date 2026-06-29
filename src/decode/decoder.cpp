@@ -34,7 +34,7 @@ static double ddcBw(int baud)
     if (baud == 10500)
         return 21000.0;
     if (baud == 8400)
-        return 14000.0;
+        return 11000.0;
     return 6000.0;
 }
 

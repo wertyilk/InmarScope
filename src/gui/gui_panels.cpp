@@ -2149,16 +2149,40 @@ void drawConstellation(App& app)
     }
 
     // Decoder selector (also selectable by clicking a row in Decoders panel).
-    char preview[64];
-    std::snprintf(preview, sizeof(preview), "ch %d  %.4f MHz", chan, freq);
+    int preBaud = 0;
+    bool preIsB = false;
+    for (auto& d : decs)
+    {
+        if (d.channelId == chan)
+        {
+            preBaud = d.baud;
+            preIsB = d.isB;
+            break;
+        }
+    }
+    char preview[128];
+    const char* baudStr = (preBaud == kEgcBaud) ? "EGC" : nullptr;
+    if (baudStr)
+        std::snprintf(preview, sizeof(preview), "Channel %d  %.4f MHz  %s%s",
+                      chan, freq, baudStr, preIsB ? " [B]" : "");
+    else
+        std::snprintf(preview, sizeof(preview), "Channel %d  %.4f MHz  @%d%s",
+                      chan, freq, preBaud, preIsB ? " [B]" : "");
+    ImGui::SetNextItemWidth(-1.0f);
     if (ImGui::BeginCombo("Decoder", preview))
     {
         for (auto& d : decs)
         {
             char label[64];
-            std::snprintf(label, sizeof(label), "ch %d  %.4f MHz  @%d%s",
-                          d.channelId, d.freqMHz, d.baud,
-                          d.isB ? " [B]" : "");
+            const char* b = (d.baud == kEgcBaud) ? "EGC" : nullptr;
+            if (b)
+                std::snprintf(label, sizeof(label), "Channel %d  %.4f MHz  %s%s",
+                              d.channelId, d.freqMHz, b,
+                              d.isB ? " [B]" : "");
+            else
+                std::snprintf(label, sizeof(label), "Channel %d  %.4f MHz  @%d%s",
+                              d.channelId, d.freqMHz, d.baud,
+                              d.isB ? " [B]" : "");
             if (ImGui::Selectable(label, d.channelId == chan))
             {
                 app.selectedDecoder = d.channelId;
