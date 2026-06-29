@@ -1295,6 +1295,9 @@ void drawSUs(App& app)
         app.decoders.suLog().clear();
         if (app.dualMode) app.decodersB.suLog().clear();
     }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##searchsu", "Search...", app.searchBuf, sizeof(app.searchBuf));
     ImGui::Separator();
 
     auto msgs = app.decoders.suLog().snapshot();
@@ -1305,6 +1308,13 @@ void drawSUs(App& app)
     }
     std::sort(msgs.begin(), msgs.end(),
               [](const DecodedMessage& a, const DecodedMessage& b) { return a.timeSec > b.timeSec; });
+    std::string searchLower;
+    bool hasSearch = (app.searchBuf[0] != 0);
+    if (hasSearch)
+    {
+        searchLower = app.searchBuf;
+        for (auto& ch : searchLower) ch = (char)std::tolower((unsigned char)ch);
+    }
     if (ImGui::BeginTable("##sus", 3,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable))
@@ -1317,6 +1327,13 @@ void drawSUs(App& app)
 
         for (auto it = msgs.begin(); it != msgs.end(); ++it)
         {
+            if (hasSearch)
+            {
+                std::string hay = it->text + "|" + it->hex;
+                for (auto& ch : hay) ch = (char)std::tolower((unsigned char)ch);
+                if (hay.find(searchLower) == std::string::npos)
+                    continue;
+            }
             ImGui::TableNextRow();
 
             // Colorize by SU type
@@ -1360,6 +1377,9 @@ void drawMessages(App& app)
     }
     ImGui::SameLine();
     ImGui::Checkbox("Show empty", &app.showEmptyMsgs);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##searchmsg", "Search...", app.searchBuf, sizeof(app.searchBuf));
     ImGui::Separator();
 
     auto msgs = app.decoders.log().snapshot();
@@ -1367,6 +1387,14 @@ void drawMessages(App& app)
     {
         auto b = app.decodersB.log().snapshot();
         msgs.insert(msgs.end(), b.begin(), b.end());
+    }
+    // Filter on search text (case-insensitive substring across all fields).
+    std::string searchLower;
+    bool hasSearch = (app.searchBuf[0] != 0);
+    if (hasSearch)
+    {
+        searchLower = app.searchBuf;
+        for (auto& ch : searchLower) ch = (char)std::tolower((unsigned char)ch);
     }
     if (ImGui::BeginTable("##msgs", 6,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
@@ -1387,6 +1415,15 @@ void drawMessages(App& app)
             // Hide empty ACARS messages (no text and no decoded body) unless shown.
             if (!app.showEmptyMsgs && it->text.empty() && it->decoded.empty())
                 continue;
+            // Search filter — match any field (case-insensitive).
+            if (hasSearch)
+            {
+                std::string hay = it->text + "|" + it->hex + "|" + it->reg + "|"
+                                + it->label + "|" + it->icao + "|" + it->decoded;
+                for (auto& ch : hay) ch = (char)std::tolower((unsigned char)ch);
+                if (hay.find(searchLower) == std::string::npos)
+                    continue;
+            }
             ImGui::TableNextRow();
             ImGui::PushID(rowIdx++);
             ImGui::TableNextColumn();
@@ -1724,7 +1761,18 @@ void drawEgc(App& app)
     ImGui::Checkbox("EGC", &showEgc); ImGui::SameLine();
     ImGui::Checkbox("STDC", &showTerminal);
     ImGui::TextDisabled("Inmarsat-C SafetyNET / FleetNET / system messages.");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##searchegc", "Search...", app.searchBuf, sizeof(app.searchBuf));
     ImGui::Separator();
+
+    std::string searchLower;
+    bool hasSearch = (app.searchBuf[0] != 0);
+    if (hasSearch)
+    {
+        searchLower = app.searchBuf;
+        for (auto& ch : searchLower) ch = (char)std::tolower((unsigned char)ch);
+    }
 
     auto msgs = app.decoders.egcLog().snapshot();
     if (app.dualMode)
@@ -1749,6 +1797,13 @@ void drawEgc(App& app)
             bool isTerminal = (it->priority == "Terminal");
             if (isTerminal && !showTerminal) continue;
             if (!isTerminal && !showEgc) continue;
+            if (hasSearch)
+            {
+                std::string hay = it->text + "|" + it->service + "|" + it->priority + "|" + it->timeUtc;
+                for (auto& ch : hay) ch = (char)std::tolower((unsigned char)ch);
+                if (hay.find(searchLower) == std::string::npos)
+                    continue;
+            }
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(it->timeUtc.c_str());
@@ -1845,7 +1900,18 @@ void drawLes(App& app)
     static bool hideEncrypted = false;
     ImGui::Checkbox("Hide encrypted", &hideEncrypted);
     ImGui::TextDisabled("LES private ship/shore messages (0xAA non-EGC).");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##searchles", "Search...", app.searchBuf, sizeof(app.searchBuf));
     ImGui::Separator();
+
+    std::string searchLower;
+    bool hasSearch = (app.searchBuf[0] != 0);
+    if (hasSearch)
+    {
+        searchLower = app.searchBuf;
+        for (auto& ch : searchLower) ch = (char)std::tolower((unsigned char)ch);
+    }
 
     auto msgs = app.decoders.lesLog().snapshot();
     if (app.dualMode)
@@ -1869,6 +1935,13 @@ void drawLes(App& app)
         for (auto it = msgs.rbegin(); it != msgs.rend(); ++it)
         {
             if (hideEncrypted && it->isEncrypted) continue;
+            if (hasSearch)
+            {
+                std::string hay = it->text + "|" + it->timeUtc + "|" + it->satName + "|" + it->lesLabel;
+                for (auto& ch : hay) ch = (char)std::tolower((unsigned char)ch);
+                if (hay.find(searchLower) == std::string::npos)
+                    continue;
+            }
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(it->timeUtc.c_str());
