@@ -129,6 +129,11 @@ int main(int, char**)
     app.decodersB.audioDevices(); // prime SDR B's device cache for id resolution
     app.decoders.setAudioDevice(app.audioDevice);  // apply persisted audio device
     app.decodersB.setAudioDevice(app.audioDevice);
+    // Message store: wire to both decoder managers (but enabled_ starts false).
+    app.decoders.setMessageStore(&app.writeDb);
+    app.decodersB.setMessageStore(&app.writeDb);
+    // Cleanup old archive databases.
+    app.writeDb.cleanup(".", app.maxDbAgeDays);
     {
         RecordFormat rf = (app.recordFormat == 1) ? RecordFormat::OGG : RecordFormat::WAV;
         app.decoders.setRecordFormat(rf);
@@ -179,6 +184,15 @@ int main(int, char**)
 
         if (app.active->running())
             updateRateChange(app);
+
+        // Log-to-DB toggle: start/stop per-session database.
+        if (app.logToDb != app.writeDb.enabled())
+        {
+            if (app.logToDb)
+                app.writeDb.openSession(".");
+            else
+                app.writeDb.setEnabled(false);
+        }
 
         app.decoders.autoMonitor(app.blacklistCountries);
         if (app.dualMode)
@@ -260,6 +274,8 @@ int main(int, char**)
     app.server.stop();
     app.hack.stop();
     app.webServer.stop();
+
+    app.writeDb.closeCurrent();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

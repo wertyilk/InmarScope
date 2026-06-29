@@ -619,6 +619,20 @@ void drawControls(App& app)
     }
 
     ImGui::Separator();
+    if (ImGui::CollapsingHeader("Database (SQLite log)"))
+    {
+        ImGui::Checkbox("Log messages to database", &app.logToDb);
+        if (app.writeDb.enabled())
+            ImGui::TextDisabled("  Session DB is active");
+        if (ImGui::SliderInt("Keep DB (days)", &app.maxDbAgeDays, 1, 90))
+        {
+            if (app.maxDbAgeDays < 1) app.maxDbAgeDays = 1;
+            if (app.maxDbAgeDays > 90) app.maxDbAgeDays = 90;
+        }
+        ImGui::TextDisabled("  Archives in: .\\messages_*.db");
+    }
+
+    ImGui::Separator();
     if (ImGui::CollapsingHeader("Output (message feed)"))
     {
         const char* fmts[] = {"JSON (JAERO/Acarshub)", "JAERO text"};
@@ -1298,6 +1312,33 @@ void drawSUs(App& app)
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##searchsu", "Search...", app.searchBuf, sizeof(app.searchBuf));
+
+    // Session archive dropdown for SUs.
+    if (!app.archiveDbLabels.empty())
+    {
+        std::vector<const char*> items;
+        items.push_back("Live");
+        for (auto& lbl : app.archiveDbLabels)
+            items.push_back(lbl.c_str());
+        ImGui::SetNextItemWidth(200);
+        if (ImGui::Combo("Session", &app.archiveComboSu, items.data(), (int)items.size()))
+        {
+            if (app.archiveComboSu == 0)
+            {
+                app.decoders.suLog().clearArchive();
+            }
+            else
+            {
+                int idx = app.archiveComboSu - 1;
+                if (idx < (int)app.archiveDbPaths.size())
+                    app.writeDb.loadAcarsOrSu(app.archiveDbPaths[idx],
+                                              MessageStore::SU,
+                                              &app.decoders.suLog(), 0);
+            }
+        }
+        if (app.decoders.suLog().hasArchive())
+            ImGui::TextDisabled("  Viewing archived session");
+    }
     ImGui::Separator();
 
     auto msgs = app.decoders.suLog().snapshot();
@@ -1380,6 +1421,49 @@ void drawMessages(App& app)
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##searchmsg", "Search...", app.searchBuf, sizeof(app.searchBuf));
+
+    // Session archive dropdown — reloads ACARS from a past DB file.
+    {
+        double now = (double)std::time(nullptr);
+        if (app.archiveDbLastScan == 0.0 || now - app.archiveDbLastScan > 3.0)
+        {
+            app.archiveDbPaths.clear();
+            app.archiveDbLabels.clear();
+            auto files = app.writeDb.scanArchives(".");
+            for (auto& f : files)
+            {
+                app.archiveDbPaths.push_back(f.filename);
+                app.archiveDbLabels.push_back(f.displayLabel + "  (" +
+                                              std::to_string(f.rowCount) + " msgs)");
+            }
+            app.archiveDbLastScan = now;
+        }
+        if (!app.archiveDbLabels.empty())
+        {
+            std::vector<const char*> items;
+            items.push_back("Live");
+            for (auto& lbl : app.archiveDbLabels)
+                items.push_back(lbl.c_str());
+            ImGui::SetNextItemWidth(200);
+            if (ImGui::Combo("Session", &app.archiveComboMsg, items.data(), (int)items.size()))
+            {
+                if (app.archiveComboMsg == 0)
+                {
+                    app.decoders.log().clearArchive();
+                }
+                else
+                {
+                    int idx = app.archiveComboMsg - 1;
+                    if (idx < (int)app.archiveDbPaths.size())
+                        app.writeDb.loadAcarsOrSu(app.archiveDbPaths[idx],
+                                                  MessageStore::ACARS,
+                                                  &app.decoders.log(), 0);
+                }
+            }
+            if (app.decoders.log().hasArchive())
+                ImGui::TextDisabled("  Viewing archived session");
+        }
+    }
     ImGui::Separator();
 
     auto msgs = app.decoders.log().snapshot();
@@ -1764,6 +1848,29 @@ void drawEgc(App& app)
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##searchegc", "Search...", app.searchBuf, sizeof(app.searchBuf));
+
+    // Session archive dropdown for EGC.
+    if (!app.archiveDbLabels.empty())
+    {
+        std::vector<const char*> items;
+        items.push_back("Live");
+        for (auto& lbl : app.archiveDbLabels)
+            items.push_back(lbl.c_str());
+        ImGui::SetNextItemWidth(200);
+        if (ImGui::Combo("Session", &app.archiveComboEgc, items.data(), (int)items.size()))
+        {
+            if (app.archiveComboEgc == 0)
+                app.decoders.egcLog().clearArchive();
+            else
+            {
+                int idx = app.archiveComboEgc - 1;
+                if (idx < (int)app.archiveDbPaths.size())
+                    app.writeDb.loadEgc(app.archiveDbPaths[idx], &app.decoders.egcLog());
+            }
+        }
+        if (app.decoders.egcLog().hasArchive())
+            ImGui::TextDisabled("  Viewing archived session");
+    }
     ImGui::Separator();
 
     std::string searchLower;
@@ -1903,6 +2010,29 @@ void drawLes(App& app)
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##searchles", "Search...", app.searchBuf, sizeof(app.searchBuf));
+
+    // Session archive dropdown for LES.
+    if (!app.archiveDbLabels.empty())
+    {
+        std::vector<const char*> items;
+        items.push_back("Live");
+        for (auto& lbl : app.archiveDbLabels)
+            items.push_back(lbl.c_str());
+        ImGui::SetNextItemWidth(200);
+        if (ImGui::Combo("Session", &app.archiveComboLes, items.data(), (int)items.size()))
+        {
+            if (app.archiveComboLes == 0)
+                app.decoders.lesLog().clearArchive();
+            else
+            {
+                int idx = app.archiveComboLes - 1;
+                if (idx < (int)app.archiveDbPaths.size())
+                    app.writeDb.loadLes(app.archiveDbPaths[idx], &app.decoders.lesLog());
+            }
+        }
+        if (app.decoders.lesLog().hasArchive())
+            ImGui::TextDisabled("  Viewing archived session");
+    }
     ImGui::Separator();
 
     std::string searchLower;

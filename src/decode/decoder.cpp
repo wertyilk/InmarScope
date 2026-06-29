@@ -239,7 +239,7 @@ void Decoder::onAcars(const uint8_t* data, int len, uint32_t aes_id,
     }
 
     if (log_)
-        log_->add(m);
+        log_->addAndStore(m, baud_);
     ++msgCount_;
 }
 
@@ -305,7 +305,7 @@ void Decoder::onAcars2(const jaero_acars_msg* msg)
     }
 
     if (log_)
-        log_->add(m);
+        log_->addAndStore(m, baud_);
     if (acTable_)
         acTable_->update(m, (double)std::time(nullptr));
     ++msgCount_;
@@ -534,7 +534,7 @@ void Decoder::onDecoded(const uint8_t* data, int len)
 
     logWrite("SU %s  hex=%s", suTypeName(data[0]), m.hex.c_str());
 
-    suLog_->add(m);
+    suLog_->addSuAndStore(m, baud_);
 }
 
 void Decoder::cassignTrampoline(int, uint8_t type, uint32_t aes_id, uint8_t ges_id,

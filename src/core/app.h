@@ -14,6 +14,7 @@
 #include "sdr/iq_recorder.h"
 #include "audio/audio_player.h"
 #include "web/web_server.h"
+#include "store/message_store.h"
 #include "decode/band_plan.h"
 #include "decode/decoder_manager.h"
 #include "output/message_feed.h"
@@ -224,6 +225,23 @@ struct App
     std::vector<float> callHunterBaseline;
     int    callHunterWarmup = 0;
     double callHunterLastCenter = 0.0;
+
+    // Persistent message store (SQLite) — per-session, opt-in.
+    MessageStore writeDb;
+    bool   logToDb = false;
+    int    maxDbAgeDays = 30;
+
+    // Cached list of archive DB files for session dropdowns.
+    std::vector<std::string> archiveDbPaths;
+    std::vector<std::string> archiveDbLabels;
+    double                  archiveDbLastScan = 0.0;
+    int    archiveComboMsg = 0;  // Messages panel session combo
+    int    archiveComboSu  = 0;  // SUs panel session combo
+    int    archiveComboEgc = 0;  // EGC panel session combo
+    int    archiveComboLes = 0;  // LES panel session combo
+
+    // Shared search buffer for the Messages / SUs / EGC / LES panels.
+    char searchBuf[128] = {};
 
     int  layoutVersion = 0;
     bool forceDefaultLayout = false;

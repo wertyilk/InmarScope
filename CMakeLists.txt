@@ -162,6 +162,7 @@ add_executable(InmarScope
     src/audio/audio_player.cpp
     src/audio/miniaudio_impl.cpp
     src/web/web_server.cpp
+    src/store/message_store.cpp
     src/output/message_feed.cpp
     src/update/version_check.cpp
     src/web/flight_map_webview.cpp
@@ -186,6 +187,7 @@ if(AIRSPY_FOUND)
 endif()
 find_library(ZSTD_LIBRARIES NAMES zstd libzstd REQUIRED)
 find_library(ZLIB_LIB NAMES z libz zlib REQUIRED)
+find_library(SQLITE3_LIB NAMES sqlite3 libsqlite3 REQUIRED)
 
 # libogg + libvorbis for OGG Vorbis voice recording.
 if(PkgConfig_FOUND)
@@ -199,7 +201,7 @@ if(NOT OGG_FOUND OR NOT VORBIS_FOUND)
     find_library(VORBISENC_LIBRARIES NAMES vorbisenc libvorbisenc REQUIRED)
 endif()
 
-target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${WEBVIEW2_LIB})
+target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${WEBVIEW2_LIB} ${SQLITE3_LIB})
 if(AIRSPY_FOUND)
     target_link_libraries(InmarScope PRIVATE ${AIRSPY_LIBRARIES})
 endif()
@@ -237,6 +239,7 @@ if(WIN32)
         libogg-0.dll
         libvorbis-0.dll
         libvorbisenc-2.dll
+        libsqlite3-0.dll
         WebView2Loader.dll
     )
     if(AIRSPY_FOUND)

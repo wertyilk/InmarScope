@@ -40,6 +40,7 @@ void cfgWriteAll(App& app, ImGuiTextBuffer* buf)
     WI(sourceMode); WI(deviceIndex); WI(sampleRateIdx); WI(newBaud); WI(fftSizeIdx);
     WI(audioDevice); WI(voiceMuted); WI(cpuReduce);
     WI(autoAddLes); WI(maxLesAutoDecoders);
+    WI(logToDb); WI(maxDbAgeDays);
     WI(webServerEnabled); WI(webServerPort);
     WD(centerFreqMHz);
     WF(iqBufferSec);
@@ -103,6 +104,7 @@ void cfgReadLine(App& app, const char* line)
     RI(sourceMode); RI(deviceIndex); RI(sampleRateIdx); RI(newBaud); RI(fftSizeIdx);
     RI(audioDevice); RB(voiceMuted); RB(cpuReduce);
     RB(autoAddLes); RI(maxLesAutoDecoders);
+    RB(logToDb); RI(maxDbAgeDays);
     RB(webServerEnabled); RI(webServerPort);
     RD(centerFreqMHz);
     RF(iqBufferSec);

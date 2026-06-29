@@ -92,6 +92,9 @@ public:
     // Forward cpuReduce to all decoders.
     void setCpuReduce(bool on);
 
+    // Persistence: forward the SQLite store to all message logs.
+    void setMessageStore(MessageStore* s);
+
     // Voice call recording: every 8400 decoder writes its calls to WAV files
     // (one per call) in dir, independent of which channel is being monitored.
     void setRecording(bool on, const std::string& dir);

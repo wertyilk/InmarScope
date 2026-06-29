@@ -317,6 +317,16 @@ void DecoderManager::setCpuReduce(bool on)
     }
 }
 
+void DecoderManager::setMessageStore(MessageStore* s)
+{
+    log_.setStore(s);
+    suLog_.setStore(s);
+    egcLog_.setStore(s);
+    lesLog_.setStore(s);
+    mesLog_.setStore(s);
+    voiceCallLog_.setStore(s);
+}
+
 void DecoderManager::setRecording(bool on, const std::string& dir)
 {
     recordOn_ = on;

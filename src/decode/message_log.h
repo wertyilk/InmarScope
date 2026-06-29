@@ -1,6 +1,8 @@
 // Thread-safe log of decoded messages for the Messages panel.
 #pragma once
 
+#include "store/message_store.h"
+
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -38,8 +40,37 @@ struct DecodedMessage
 class MessageLog
 {
 public:
+    void setStore(MessageStore* s) { store_ = s; }
+
     void add(const DecodedMessage& m)
     {
+        std::lock_guard<std::mutex> lk(mtx_);
+        msgs_.push_back(m);
+        if (msgs_.size() > kMax)
+            msgs_.erase(msgs_.begin(), msgs_.begin() + (msgs_.size() - kMax));
+        ++count_;
+    }
+
+    // Called from the decode worker — persists to store and then in-memory.
+    void addAndStore(const DecodedMessage& m, int baud)
+    {
+        if (store_)
+            store_->storeAcars(m.timeSec, m.channelId, m.freqMHz, m.text, m.hex,
+                              m.aesId, m.icao, m.reg, m.flight, m.label,
+                              m.hasPos, m.lat, m.lon, m.alt, m.decoded,
+                              (m.downlink != 0), baud);
+        std::lock_guard<std::mutex> lk(mtx_);
+        msgs_.push_back(m);
+        if (msgs_.size() > kMax)
+            msgs_.erase(msgs_.begin(), msgs_.begin() + (msgs_.size() - kMax));
+        ++count_;
+    }
+
+    void addSuAndStore(const DecodedMessage& m, int baud)
+    {
+        if (store_)
+            store_->storeSu(m.timeSec, m.channelId, m.freqMHz, m.text, m.hex,
+                           m.aesId, m.suType, baud);
         std::lock_guard<std::mutex> lk(mtx_);
         msgs_.push_back(m);
         if (msgs_.size() > kMax)
@@ -51,12 +82,16 @@ public:
     std::vector<DecodedMessage> snapshot()
     {
         std::lock_guard<std::mutex> lk(mtx_);
+        if (viewArchive_)
+            return archive_;
         return msgs_;
     }
 
     uint64_t count()
     {
         std::lock_guard<std::mutex> lk(mtx_);
+        if (viewArchive_)
+            return (uint64_t)archive_.size();
         return count_;
     }
 
@@ -64,13 +99,35 @@ public:
     {
         std::lock_guard<std::mutex> lk(mtx_);
         msgs_.clear();
+        archive_.clear();
+        viewArchive_ = false;
     }
+
+    // Load a past session into the archive buffer (replacing any prior archive).
+    void setArchive(std::vector<DecodedMessage> items)
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        archive_ = std::move(items);
+        viewArchive_ = true;
+    }
+
+    void clearArchive()
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        archive_.clear();
+        viewArchive_ = false;
+    }
+
+    bool hasArchive() const { return viewArchive_; }
 
 private:
     static constexpr size_t kMax = 2000;
     std::mutex mtx_;
     std::vector<DecodedMessage> msgs_;
+    std::vector<DecodedMessage> archive_;
+    bool viewArchive_ = false;
     uint64_t count_ = 0;
+    MessageStore* store_ = nullptr;
 };
 
 // A decoded C-channel (voice/data) assignment.
@@ -138,6 +195,8 @@ struct EgcMessage
 class EgcLog
 {
 public:
+    void setStore(MessageStore* s) { store_ = s; }
+
     void add(const EgcMessage& m)
     {
         std::lock_guard<std::mutex> lk(mtx_);
@@ -158,6 +217,14 @@ public:
                 return;
             }
         }
+        // New message — persist to store first.
+        if (store_)
+        {
+            double now = (double)std::time(nullptr);
+            store_->storeEgc(now, m.channelId, m.freqMHz, m.text,
+                            m.timeUtc, m.priority, m.messageId,
+                            m.service, m.presentation);
+        }
         msgs_.push_back(m);
         if (msgs_.size() > kMax)
             msgs_.erase(msgs_.begin(), msgs_.begin() + (msgs_.size() - kMax));
@@ -166,24 +233,47 @@ public:
     std::vector<EgcMessage> snapshot()
     {
         std::lock_guard<std::mutex> lk(mtx_);
+        if (viewArchive_)
+            return archive_;
         return msgs_;
     }
     uint64_t count()
     {
         std::lock_guard<std::mutex> lk(mtx_);
+        if (viewArchive_)
+            return (uint64_t)archive_.size();
         return count_;
     }
     void clear()
     {
         std::lock_guard<std::mutex> lk(mtx_);
         msgs_.clear();
+        archive_.clear();
+        viewArchive_ = false;
     }
+
+    void setArchive(std::vector<EgcMessage> items)
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        archive_ = std::move(items);
+        viewArchive_ = true;
+    }
+    void clearArchive()
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        archive_.clear();
+        viewArchive_ = false;
+    }
+    bool hasArchive() const { return viewArchive_; }
 
 private:
     static constexpr size_t kMax = 2000;
     std::mutex mtx_;
     std::vector<EgcMessage> msgs_;
+    std::vector<EgcMessage> archive_;
+    bool viewArchive_ = false;
     uint64_t count_ = 0;
+    MessageStore* store_ = nullptr;
 };
 
 // Active Inmarsat-C terminal (MES) tracked from terminal activity messages.
@@ -202,9 +292,14 @@ struct MesEntry
 class MesLog
 {
 public:
+    void setStore(MessageStore* s) { store_ = s; }
+
     void add(uint32_t mesId, const char* action, const char* sat, int les,
              int channel, double freqMHz, double nowSec)
     {
+        if (store_)
+            store_->storeMes(mesId, action ? action : "", sat ? sat : "",
+                            les, channel, freqMHz, nowSec);
         std::lock_guard<std::mutex> lk(mtx_);
         auto& e = entries_[mesId];
         e.mesId = mesId;
@@ -229,6 +324,7 @@ public:
 private:
     mutable std::mutex mtx_;
     std::map<uint32_t, MesEntry> entries_;
+    MessageStore* store_ = nullptr;
 };
 
 // A decoded LES (Land Earth Station) private message — non-EGC Inmarsat-C
@@ -251,8 +347,17 @@ struct LesMessage
 class LesLog
 {
 public:
+    void setStore(MessageStore* s) { store_ = s; }
+
     void add(const LesMessage& m)
     {
+        if (store_)
+        {
+            double now = (double)std::time(nullptr);
+            store_->storeLes(now, m.channelId, m.freqMHz, m.text, m.timeUtc,
+                            m.satName, m.lesId, m.lesLabel, m.channel,
+                            m.pktNo, m.isEncrypted);
+        }
         std::lock_guard<std::mutex> lk(mtx_);
         msgs_.push_back(m);
         if (msgs_.size() > kMax)
@@ -262,24 +367,47 @@ public:
     std::vector<LesMessage> snapshot()
     {
         std::lock_guard<std::mutex> lk(mtx_);
+        if (viewArchive_)
+            return archive_;
         return msgs_;
     }
     uint64_t count()
     {
         std::lock_guard<std::mutex> lk(mtx_);
+        if (viewArchive_)
+            return (uint64_t)archive_.size();
         return count_;
     }
     void clear()
     {
         std::lock_guard<std::mutex> lk(mtx_);
         msgs_.clear();
+        archive_.clear();
+        viewArchive_ = false;
     }
+
+    void setArchive(std::vector<LesMessage> items)
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        archive_ = std::move(items);
+        viewArchive_ = true;
+    }
+    void clearArchive()
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        archive_.clear();
+        viewArchive_ = false;
+    }
+    bool hasArchive() const { return viewArchive_; }
 
 private:
     static constexpr size_t kMax = 2000;
     std::mutex mtx_;
     std::vector<LesMessage> msgs_;
+    std::vector<LesMessage> archive_;
+    bool viewArchive_ = false;
     uint64_t count_ = 0;
+    MessageStore* store_ = nullptr;
 };
 
 // A channel discovered from the network's own system-table broadcasts.
@@ -523,6 +651,8 @@ struct VoiceCallRecord
 class VoiceCallLog
 {
 public:
+    void setStore(MessageStore* s) { store_ = s; }
+
     void add(const VoiceCallRecord& r)
     {
         std::lock_guard<std::mutex> lk(mtx_);
@@ -554,6 +684,10 @@ public:
 #endif
                     it->filename = slash ? (slash + 1) : s;
                 }
+                // Persist to store with full info now available.
+                if (store_ && it->durationSec > 0)
+                    store_->storeVoice(it->timeSec, it->freqMHz, it->aesId,
+                                      it->icao, it->durationSec, it->filename);
                 return;
             }
         }
@@ -585,4 +719,5 @@ private:
     std::mutex mtx_;
     std::vector<VoiceCallRecord> items_;
     uint64_t count_ = 0;
+    MessageStore* store_ = nullptr;
 };
