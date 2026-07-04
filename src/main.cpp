@@ -15,6 +15,7 @@
 
 #include "core/app.h"
 #include "decode/icao_country.h"
+#include "i18n/i18n.h"
 #include "util/log.h"
 #include "version.h"
 #include "gui/waterfall.h"
@@ -108,6 +109,11 @@ int main(int, char**)
     cfgRegisterHandler(app);
     io.IniFilename = "inmarscope.ini";
     ImGui::LoadIniSettingsFromDisk(io.IniFilename);
+
+    // Language and font size.  Both require a restart to take full effect
+    // for the font atlas, but strings pass through _L() immediately.
+    i18nInit();
+    i18nSet((Lang)app.languageIdx);
 
     // Font: use Roboto-Medium (vendored TTF, scales cleanly at any size).
     // Clamp to sensible range and scale the style sizes proportionally.
@@ -232,12 +238,24 @@ int main(int, char**)
         updateFeed(app);
 
         drawControls(app);
-        drawSpectrum(app, app.viewA, app.decoders, "Spectrum", true, false);
-        drawWaterfall(app, app.viewA, "Waterfall");
+        {
+            std::string t = std::string(_L("Spectrum")) + "###Spectrum";
+            drawSpectrum(app, app.viewA, app.decoders, t.c_str(), true, false);
+        }
+        {
+            std::string t = std::string(_L("Waterfall")) + "###Waterfall";
+            drawWaterfall(app, app.viewA, t.c_str());
+        }
         if (app.dualMode)
         {
-            drawSpectrum(app, app.viewB, app.decodersB, "Spectrum (B)", true, true);
-            drawWaterfall(app, app.viewB, "Waterfall (B)");
+            {
+                std::string t = std::string(_L("Spectrum")) + "###Spectrum (B)";
+                drawSpectrum(app, app.viewB, app.decodersB, t.c_str(), true, true);
+            }
+            {
+                std::string t = std::string(_L("Waterfall")) + "###Waterfall (B)";
+                drawWaterfall(app, app.viewB, t.c_str());
+            }
         }
         drawDecoders(app);
         drawSUs(app);

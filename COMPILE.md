@@ -34,16 +34,19 @@ pacman -S --needed \
   mingw-w64-x86_64-hackrf \
   mingw-w64-x86_64-libusb \
   mingw-w64-x86_64-zstd \
-  mingw-w64-x86_64-ogg \
-  mingw-w64-x86_64-vorbis
+  mingw-w64-x86_64-libogg \
+  mingw-w64-x86_64-libvorbis \
+  mingw-w64-x86_64-sqlite3
 ```
 
 These provide: GCC/G++, CMake, Ninja, pkg-config, GLFW (windowing), librtlsdr +
 libusb (RTL-SDR), HackRF, and zstd (SDR++ server compression). OpenGL and zlib
 ship with the toolchain. libogg + libvorbis provide OGG Vorbis voice recording.
+SQLite3 provides the message archive database.
 
-Dear ImGui, ImPlot, the JAERO DSP, mbelib, libacars, miniaudio, and WebView2 SDK
-are vendored in `third_party/` and need no separate install.
+All other dependencies (Dear ImGui, ImPlot, the JAERO DSP, mbelib, libacars,
+miniaudio, WebView2 SDK) are vendored in `third_party/` — the repo is fully
+self-contained. **No `git submodule` commands are needed.**
 
 ### Optional: Airspy support
 
@@ -70,7 +73,8 @@ build/InmarScope.exe
 build/libgcc_s_seh-1.dll, libwinpthread-1.dll, libstdc++-6.dll,
       glfw3.dll, librtlsdr.dll, libhackrf.dll, libusb-1.0.dll,
       libzstd.dll, zlib1.dll, libogg-0.dll, libvorbis-0.dll,
-      libvorbisenc-2.dll, WebView2Loader.dll
+      libvorbisenc-2.dll, libsqlite3-0.dll,
+      WebView2Loader.dll
 ```
 (plus `build/libairspy.dll` when Airspy support is enabled)
 

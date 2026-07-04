@@ -249,6 +249,9 @@ struct App
     // Font size (pt), persisted — requires restart to take effect.
     int  fontSize = 17;
 
+    // Language index (0 = English).  Persisted, applied at next startup.
+    int  languageIdx = 0;
+
     double lastConfiguredFs = 0.0;
 };
 

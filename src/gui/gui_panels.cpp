@@ -8,6 +8,7 @@
 #include "core/main_funcs.h"
 #include "decode/icao_country.h"
 #include "decode/band_plan.h"
+#include "i18n/i18n.h"
 #include "util/log.h"
 #include "version.h"
 #include "gui/waterfall.h"
@@ -33,17 +34,17 @@
 
 void drawControls(App& app)
 {
-    ImGui::Begin("Control");
+    ImGui::Begin((std::string(_L("Control")) + "###Control").c_str());
 
     bool running = app.active->running();
 
     ImGui::BeginDisabled(running);
 #ifdef HAS_AIRSPY
     const char* modes[] = {"RTL-SDR", "WAV file", "SDR++ Server", "HackRF", "Dual RTL", "Airspy"};
-    ImGui::Combo("Source", &app.sourceMode, modes, 6);
+    ImGui::Combo(_L("Source"), &app.sourceMode, modes, 6);
 #else
     const char* modes[] = {"RTL-SDR", "WAV file", "SDR++ Server", "HackRF", "Dual RTL"};
-    ImGui::Combo("Source", &app.sourceMode, modes, 5);
+    ImGui::Combo(_L("Source"), &app.sourceMode, modes, 5);
 #endif
     ImGui::EndDisabled();
 
@@ -53,13 +54,13 @@ void drawControls(App& app)
     {
         bool canStart = (app.sourceMode == 1) ? (app.wavPath[0] != '\0') : true;
         ImGui::BeginDisabled(!canStart);
-        if (ImGui::Button("Start", ImVec2(120, 0)))
+        if (ImGui::Button(_L("Start"), ImVec2(120, 0)))
             startActive(app);
         ImGui::EndDisabled();
     }
     else
     {
-        if (ImGui::Button("Stop", ImVec2(120, 0)))
+        if (ImGui::Button(_L("Stop"), ImVec2(120, 0)))
         {
             app.active->stop();
             app.decoders.stop();
@@ -122,7 +123,7 @@ void drawControls(App& app)
     if (app.sourceMode == 0)
     {
         // ---- RTL-SDR ----
-        if (ImGui::Button("Refresh devices"))
+        if (ImGui::Button(_L("Refresh devices")))
             app.devices = app.sdr.listDevices();
         ImGui::SameLine();
         ImGui::Text("(%d found)", (int)app.devices.size());
@@ -154,13 +155,13 @@ void drawControls(App& app)
             if (running)
                 app.sdr.setCenterFreq(app.centerFreqMHz * 1e6);
         }
-        if (ImGui::Combo("Sample rate (MHz)", &app.sampleRateIdx, kRateLabels, kNumRates))
+        if (ImGui::Combo(_L("Sample rate (MHz)"), &app.sampleRateIdx, kRateLabels, kNumRates))
         {
             app.viewA.resetView = true;
             if (running)
                 app.sdr.setSampleRate(kRates[app.sampleRateIdx]);
         }
-        if (ImGui::Checkbox("Auto gain (AGC)", &app.autoGain))
+        if (ImGui::Checkbox(_L("Auto gain (AGC)"), &app.autoGain))
         {
             if (running)
                 app.sdr.setGain(app.autoGain ? -1.0 : (double)app.gainDb);
@@ -173,7 +174,7 @@ void drawControls(App& app)
                     app.sdr.setGain((double)app.gainDb);
             }
         }
-        if (ImGui::Checkbox("Bias-T", &app.biasTee))
+        if (ImGui::Checkbox(_L("Bias-T"), &app.biasTee))
         {
             if (running)
                 app.sdr.setBiasTee(app.biasTee);
@@ -183,7 +184,7 @@ void drawControls(App& app)
             if (running)
                 app.sdr.setPpm((double)app.ppm);
         }
-        if (ImGui::Checkbox("DC block", &app.dcBlock))
+        if (ImGui::Checkbox(_L("DC block"), &app.dcBlock))
         {
             if (running)
                 app.sdr.setDcBlock(app.dcBlock);
@@ -195,10 +196,10 @@ void drawControls(App& app)
         ImGui::SetNextItemWidth(-90.0f);
         ImGui::InputText("##wavpath", app.wavPath, sizeof(app.wavPath));
         ImGui::SameLine();
-        if (ImGui::Button("Browse..."))
+        if (ImGui::Button(_L("Browse...")))
             openWavDialog(app.wavPath, sizeof(app.wavPath));
 
-        if (ImGui::Checkbox("Loop", &app.wavLoop))
+        if (ImGui::Checkbox(_L("Loop"), &app.wavLoop))
         {
             if (running)
                 app.wav.setLoop(app.wavLoop);
@@ -273,7 +274,7 @@ void drawControls(App& app)
     else if (app.sourceMode == 3)
     {
         // ---- HackRF (native) ----
-        if (ImGui::Button("Refresh devices"))
+        if (ImGui::Button(_L("Refresh devices")))
             app.devices = app.hack.listDevices();
         ImGui::SameLine();
         ImGui::Text("(%d found)", (int)app.devices.size());
@@ -326,7 +327,7 @@ void drawControls(App& app)
         {
             if (running) app.hack.setBiasTee(app.hackBias);
         }
-        if (ImGui::Checkbox("DC block", &app.dcBlock))
+        if (ImGui::Checkbox(_L("DC block"), &app.dcBlock))
         {
             if (running) app.hack.setDcBlock(app.dcBlock);
         }
@@ -335,7 +336,7 @@ void drawControls(App& app)
     else if (app.sourceMode == 5)
     {
         // ---- Airspy (native) ----
-        if (ImGui::Button("Refresh devices"))
+        if (ImGui::Button(_L("Refresh devices")))
             app.devices = app.airspy.listDevices();
         ImGui::SameLine();
         ImGui::Text("(%d found)", (int)app.devices.size());
@@ -362,7 +363,7 @@ void drawControls(App& app)
             if (running)
                 app.airspy.setCenterFreq(app.centerFreqMHz * 1e6);
         }
-        if (ImGui::Combo("Sample rate (MHz)", &app.airspySampleRateIdx, kAirspyRateLabels, kAirspyNumRates))
+        if (ImGui::Combo(_L("Sample rate (MHz)"), &app.airspySampleRateIdx, kAirspyRateLabels, kAirspyNumRates))
         {
             app.viewA.resetView = true;
             if (running)
@@ -423,7 +424,7 @@ void drawControls(App& app)
         {
             if (running) app.airspy.setBiasTee(app.airspyBias);
         }
-        if (ImGui::Checkbox("DC block", &app.dcBlock))
+        if (ImGui::Checkbox(_L("DC block"), &app.dcBlock))
         {
             if (running) app.airspy.setDcBlock(app.dcBlock);
         }
@@ -494,14 +495,14 @@ void drawControls(App& app)
 
     ImGui::Separator();
     ImGui::Combo("FFT size", &app.fftSizeIdx, kFftLabels, kNumFftSizes);
-    ImGui::SliderFloat("Averaging", &app.avgAlpha, 0.0f, 0.98f, "%.2f");
-    ImGui::Checkbox("Auto-scale dB", &app.autoScale);
-    ImGui::SliderFloat("dB min", &app.dbMin, -140.0f, 0.0f, "%.0f");
-    ImGui::SliderFloat("dB max", &app.dbMax, -140.0f, 20.0f, "%.0f");
+    ImGui::SliderFloat(_L("Averaging"), &app.avgAlpha, 0.0f, 0.98f, "%.2f");
+    ImGui::Checkbox(_L("Auto-scale dB"), &app.autoScale);
+    ImGui::SliderFloat(_L("dB min"), &app.dbMin, -140.0f, 0.0f, "%.0f");
+    ImGui::SliderFloat(_L("dB max"), &app.dbMax, -140.0f, 20.0f, "%.0f");
     if (app.dbMax < app.dbMin + 5.0f)
         app.dbMax = app.dbMin + 5.0f;
 
-    if (ImGui::Button("Reset view (fit band)"))
+    if (ImGui::Button(_L("Reset view (fit band)")))
     {
         app.viewA.resetView = true;
         app.viewB.resetView = true;
@@ -516,7 +517,7 @@ void drawControls(App& app)
         ImGui::TextDisabled("  (WAV: tuning is fixed to the file)");
 
     // Band plan bar along bottom of spectrum
-    if (ImGui::Checkbox("Band Plan", &app.showBandPlan));
+    if (ImGui::Checkbox(_L("Band Plan"), &app.showBandPlan));
     if (app.showBandPlan)
     {
         ImGui::SameLine();
@@ -554,7 +555,7 @@ void drawControls(App& app)
 
     if (app.dualMode)
     {
-        if (ImGui::Checkbox("Band Plan (B)", &app.showBandPlanB));
+        if (ImGui::Checkbox(_L("Band Plan (B)"), &app.showBandPlanB));
         if (app.showBandPlanB && !app.bandPlanNames.empty())
         {
             if (app.bandPlanIdxB >= (int)app.bandPlanNames.size())
@@ -578,12 +579,12 @@ void drawControls(App& app)
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.18f, 0.42f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.15f, 0.28f, 0.60f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.12f, 0.22f, 0.50f, 1.0f));
-    ImGui::Combo("Decode baud", &app.newBaud, bauds, 5);
+    ImGui::Combo(_L("Decode baud"), &app.newBaud, bauds, 5);
     ImGui::PopStyleColor(3);
     ImGui::TextDisabled("Ctrl+click the spectrum to add a decoder there");
 
     ImGui::Separator();
-    ImGui::Checkbox("Follow C-channel voice", &app.voiceFollow);
+    ImGui::Checkbox(_L("Follow C-channel voice"), &app.voiceFollow);
     if (app.sourceMode == 1)
         ImGui::TextDisabled("  (WAV: only voice already in-band can be followed)");
     ImGui::SetNextItemWidth(140.0f);
@@ -600,12 +601,12 @@ void drawControls(App& app)
     }
 
     ImGui::Separator();
-    if (ImGui::CollapsingHeader("CallHunter (auto-scan for voice)"))
+    if (ImGui::CollapsingHeader(_L("CallHunter (auto-scan for voice)")))
     {
-        ImGui::Checkbox("Enable CallHunter", &app.callHunterMode);
-        ImGui::SliderFloat("Threshold (dB above baseline)", &app.callHunterThreshDB, 1.0f, 20.0f, "%.1f");
-        ImGui::SliderInt("Confirm frames", &app.callHunterConfirm, 5, 60);
-        ImGui::SliderInt("Lost frames", &app.callHunterLost, 10, 120);
+        ImGui::Checkbox(_L("Enable CallHunter"), &app.callHunterMode);
+        ImGui::SliderFloat(_L("Threshold (dB above baseline)"), &app.callHunterThreshDB, 1.0f, 20.0f, "%.1f");
+        ImGui::SliderInt(_L("Confirm frames"), &app.callHunterConfirm, 5, 60);
+        ImGui::SliderInt(_L("Lost frames"), &app.callHunterLost, 10, 120);
 
         int activeN = 0, candN = (int)app.callHunterCands.size();
         for (auto& c : app.callHunterCands)
@@ -619,12 +620,12 @@ void drawControls(App& app)
     }
 
     ImGui::Separator();
-    if (ImGui::CollapsingHeader("Database (SQLite log)"))
+    if (ImGui::CollapsingHeader(_L("Database (SQLite log)")))
     {
-        ImGui::Checkbox("Log messages to database", &app.logToDb);
+        ImGui::Checkbox(_L("Log messages to database"), &app.logToDb);
         if (app.writeDb.enabled())
             ImGui::TextDisabled("  Session DB is active");
-        if (ImGui::SliderInt("Keep DB (days)", &app.maxDbAgeDays, 1, 90))
+        if (ImGui::SliderInt(_L("Keep DB (days)"), &app.maxDbAgeDays, 1, 90))
         {
             if (app.maxDbAgeDays < 1) app.maxDbAgeDays = 1;
             if (app.maxDbAgeDays > 90) app.maxDbAgeDays = 90;
@@ -633,9 +634,9 @@ void drawControls(App& app)
     }
 
     ImGui::Separator();
-    if (ImGui::CollapsingHeader("Display"))
+    if (ImGui::CollapsingHeader(_L("Display")))
     {
-        if (ImGui::SliderInt("Font size", &app.fontSize, 8, 24, "%d", ImGuiSliderFlags_AlwaysClamp))
+        if (ImGui::SliderInt(_L("Font size"), &app.fontSize, 8, 24, "%d", ImGuiSliderFlags_AlwaysClamp))
         {
             if (app.fontSize < 8)  app.fontSize = 8;
             if (app.fontSize > 24) app.fontSize = 24;
@@ -644,7 +645,7 @@ void drawControls(App& app)
     }
 
     ImGui::Separator();
-    if (ImGui::CollapsingHeader("Output (message feed)"))
+    if (ImGui::CollapsingHeader(_L("Output (message feed)")))
     {
         const char* fmts[] = {"JSON (JAERO/Acarshub)", "JAERO text"};
         ImGui::Combo("Format", &app.outFormat, fmts, 2);
@@ -1057,7 +1058,7 @@ void drawWaterfall(App& app, SpectrumView& v, const char* title)
 
 void drawDecoders(App& app)
 {
-    ImGui::Begin("Decoders");
+    ImGui::Begin((std::string(_L("Decoders")) + "###Decoders").c_str());
 
     auto decs = app.decoders.status();
     if (app.dualMode)
@@ -1077,7 +1078,7 @@ void drawDecoders(App& app)
     else
         ImGui::TextDisabled("  drops: 0");
     ImGui::SameLine();
-    if (ImGui::SmallButton("Remove all"))
+    if (ImGui::SmallButton(_L("Remove all")))
     {
         app.decoders.removeAll();
         if (app.dualMode) app.decodersB.removeAll();
@@ -1096,14 +1097,14 @@ void drawDecoders(App& app)
     if (lvl > 1.0f) lvl = 1.0f;
     ImGui::ProgressBar(lvl, ImVec2(110, 0), "");
     ImGui::SameLine();
-    if (ImGui::Checkbox("Mute", &app.voiceMuted))
+    if (ImGui::Checkbox(_L("Mute"), &app.voiceMuted))
     {
         app.decoders.setVoiceMute(app.voiceMuted);
         app.decodersB.setVoiceMute(app.voiceMuted);
     }
 
     ImGui::SameLine();
-    if (ImGui::Checkbox("CPU reduce", &app.cpuReduce))
+    if (ImGui::Checkbox(_L("CPU reduce"), &app.cpuReduce))
     {
         app.decoders.setCpuReduce(app.cpuReduce);
         app.decodersB.setCpuReduce(app.cpuReduce);
@@ -1133,7 +1134,7 @@ void drawDecoders(App& app)
         }
     }
 
-    if (ImGui::Checkbox("Record voice calls", &app.recordVoice))
+    if (ImGui::Checkbox(_L("Record voice calls"), &app.recordVoice))
     {
         app.decoders.setRecording(app.recordVoice, app.recordDir);
         app.decodersB.setRecording(app.recordVoice, app.recordDir);
@@ -1309,13 +1310,13 @@ void drawDecoders(App& app)
 
 void drawSUs(App& app)
 {
-    ImGui::Begin("SUs");
+    ImGui::Begin((std::string(_L("SUs")) + "###SUs").c_str());
 
     unsigned long long suTotal = app.decoders.suLog().count();
     if (app.dualMode) suTotal += app.decodersB.suLog().count();
     ImGui::Text("%llu total", suTotal);
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
     {
         app.decoders.suLog().clear();
         if (app.dualMode) app.decodersB.suLog().clear();
@@ -1416,19 +1417,19 @@ void drawSUs(App& app)
 
 void drawMessages(App& app)
 {
-    ImGui::Begin("Messages");
+    ImGui::Begin((std::string(_L("Messages")) + "###Messages").c_str());
 
     unsigned long long msgTotal = app.decoders.log().count();
     if (app.dualMode) msgTotal += app.decodersB.log().count();
     ImGui::Text("%llu total", msgTotal);
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
     {
         app.decoders.log().clear();
         if (app.dualMode) app.decodersB.log().clear();
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Show empty", &app.showEmptyMsgs);
+    ImGui::Checkbox(_L("Show empty"), &app.showEmptyMsgs);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##searchmsg", "Search...", app.searchBuf, sizeof(app.searchBuf));
@@ -1552,15 +1553,15 @@ void drawMessages(App& app)
 
 void drawAircraft(App& app)
 {
-    ImGui::Begin("Aircraft");
+    ImGui::Begin((std::string(_L("Aircraft")) + "###Aircraft").c_str());
 
     auto acs = app.decoders.aircraftTable().snapshot();
     ImGui::Text("%zu tracked", acs.size());
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
         app.decoders.aircraftTable().clear();
     ImGui::SameLine();
-    ImGui::Checkbox("With position only", &app.acPosOnly);
+    ImGui::Checkbox(_L("With position only"), &app.acPosOnly);
     ImGui::Separator();
 
     double now = (double)std::time(nullptr);
@@ -1640,13 +1641,13 @@ const char* cassignTypeName(uint8_t t)
 
 void drawCChannel(App& app)
 {
-    ImGui::Begin("C-Channel");
+    ImGui::Begin((std::string(_L("C-Channel")) + "###C-Channel").c_str());
 
     unsigned long long cTotal = app.decoders.cassignLog().count();
     if (app.dualMode) cTotal += app.decodersB.cassignLog().count();
     ImGui::Text("%llu assignment(s)", cTotal);
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
     {
         app.decoders.cassignLog().clear();
         if (app.dualMode) app.decodersB.cassignLog().clear();
@@ -1713,7 +1714,7 @@ void drawCChannel(App& app)
 
 void drawNetwork(App& app)
 {
-    ImGui::Begin("Network");
+    ImGui::Begin((std::string(_L("Network")) + "###Network").c_str());
 
     SatInfo sat = app.decoders.channelTable().satellite();
     if (sat.valid)
@@ -1721,7 +1722,7 @@ void drawNetwork(App& app)
     else
         ImGui::TextDisabled("Satellite: (waiting for system table)");
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
         app.decoders.channelTable().clear();
     ImGui::TextDisabled("Discovered from system-table broadcasts. RX = forward (decodable).");
     ImGui::Separator();
@@ -1772,7 +1773,7 @@ void drawNetwork(App& app)
 
 void drawFlightMap(App& app)
 {
-    ImGui::Begin("Flight Map");
+    ImGui::Begin((std::string(_L("Flight Map")) + "###Flight Map").c_str());
 
     auto acs = app.decoders.aircraftTable().snapshot();
     std::sort(acs.begin(), acs.end(),
@@ -1840,13 +1841,13 @@ void drawFlightMap(App& app)
 
 void drawEgc(App& app)
 {
-    ImGui::Begin("EGC");
+    ImGui::Begin((std::string(_L("EGC")) + "###EGC").c_str());
 
     unsigned long long egcTotal = app.decoders.egcLog().count();
     if (app.dualMode) egcTotal += app.decodersB.egcLog().count();
     ImGui::Text("%llu message(s)", egcTotal);
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
     {
         app.decoders.egcLog().clear();
         if (app.dualMode) app.decodersB.egcLog().clear();
@@ -1942,7 +1943,7 @@ void drawEgc(App& app)
 
 void drawMes(App& app)
 {
-    ImGui::Begin("MES");
+    ImGui::Begin((std::string(_L("MES")) + "###MES").c_str());
 
     auto entries = app.decoders.mesLog().snapshot();
     if (app.dualMode)
@@ -1952,7 +1953,7 @@ void drawMes(App& app)
     }
     ImGui::Text("%zu terminal(s)", entries.size());
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
     {
         app.decoders.mesLog().clear();
         if (app.dualMode) app.decodersB.mesLog().clear();
@@ -2003,20 +2004,20 @@ void drawMes(App& app)
 
 void drawLes(App& app)
 {
-    ImGui::Begin("LES");
+    ImGui::Begin((std::string(_L("LES")) + "###LES").c_str());
 
     unsigned long long lesTotal = app.decoders.lesLog().count();
     if (app.dualMode) lesTotal += app.decodersB.lesLog().count();
     ImGui::Text("%llu message(s)", lesTotal);
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
     {
         app.decoders.lesLog().clear();
         if (app.dualMode) app.decodersB.lesLog().clear();
     }
     ImGui::SameLine();
     static bool hideEncrypted = false;
-    ImGui::Checkbox("Hide encrypted", &hideEncrypted);
+    ImGui::Checkbox(_L("Hide encrypted"), &hideEncrypted);
     ImGui::TextDisabled("LES private ship/shore messages (0xAA non-EGC).");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
@@ -2116,7 +2117,7 @@ ImPlotPoint constGetter(int idx, void* data)
 
 void drawConstellation(App& app)
 {
-    ImGui::Begin("Constellation");
+    ImGui::Begin((std::string(_L("Constellation")) + "###Constellation").c_str());
 
     auto decs = app.decoders.status();
     if (app.dualMode)
@@ -2233,7 +2234,7 @@ void drawConstellation(App& app)
 
 void drawVoiceCalls(App& app)
 {
-    ImGui::Begin("Voice Calls");
+    ImGui::Begin((std::string(_L("Voice Calls")) + "###Voice Calls").c_str());
 
     auto calls = app.decoders.voiceCallLog().snapshot();
     if (app.dualMode)
@@ -2248,7 +2249,7 @@ void drawVoiceCalls(App& app)
     ImGui::Text("%llu calls", (unsigned long long)app.decoders.voiceCallLog().count() +
                                (app.dualMode ? app.decodersB.voiceCallLog().count() : 0));
     ImGui::SameLine();
-    if (ImGui::SmallButton("Clear"))
+    if (ImGui::SmallButton(_L("Clear")))
     {
         app.decoders.voiceCallLog().clear();
         if (app.dualMode) app.decodersB.voiceCallLog().clear();
@@ -2352,7 +2353,7 @@ void drawVoiceCalls(App& app)
 
 void drawLesFreq(App& app)
 {
-    ImGui::Begin("LES Freq");
+    ImGui::Begin((std::string(_L("LES Freq")) + "###LES Freq").c_str());
 
     if (app.autoAddLes && app.active->running())
     {
@@ -2501,7 +2502,7 @@ void drawAbout(App& app)
 
     ImGui::SetNextWindowSize(ImVec2(420, 340), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::Begin("About InmarScope", &app.showAbout,
+    if (ImGui::Begin((std::string(_L("About InmarScope")) + "###About InmarScope").c_str(), &app.showAbout,
                      ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoDocking |
                      ImGuiWindowFlags_NoCollapse))
     {
@@ -2574,48 +2575,61 @@ void drawDockHost(App& app)
         ImGui::DockBuilderSplitNode(rrest, ImGuiDir_Up, 0.58f, &rmid, &rbot);
         ImGui::DockBuilderSplitNode(rbot, ImGuiDir_Right, 0.34f, &rcon, &rbot);
 
-        ImGui::DockBuilderDockWindow("Control", ctrl);
-        ImGui::DockBuilderDockWindow("Decoders", dec);
+        ImGui::DockBuilderDockWindow((std::string(_L("Control")) + "###Control").c_str(), ctrl);
+        ImGui::DockBuilderDockWindow((std::string(_L("Decoders")) + "###Decoders").c_str(), dec);
 
-        ImGui::DockBuilderDockWindow("Spectrum", rtop);
-        ImGui::DockBuilderDockWindow("Waterfall", rmid);
+        ImGui::DockBuilderDockWindow((std::string(_L("Spectrum")) + "###Spectrum").c_str(), rtop);
+        ImGui::DockBuilderDockWindow((std::string(_L("Waterfall")) + "###Waterfall").c_str(), rmid);
         // Always split for potential dual-mode: B windows are invisible when
         // not in dual mode, and the A windows fill the space.
         {
             ImGuiID rtopR, rmidR;
             ImGui::DockBuilderSplitNode(rtop, ImGuiDir_Right, 0.5f, &rtopR, &rtop);
             ImGui::DockBuilderSplitNode(rmid, ImGuiDir_Right, 0.5f, &rmidR, &rmid);
-            ImGui::DockBuilderDockWindow("Spectrum", rtop);
-            ImGui::DockBuilderDockWindow("Waterfall", rmid);
-            ImGui::DockBuilderDockWindow("Spectrum (B)", rtopR);
-            ImGui::DockBuilderDockWindow("Waterfall (B)", rmidR);
+            ImGui::DockBuilderDockWindow((std::string(_L("Spectrum")) + "###Spectrum").c_str(), rtop);
+            ImGui::DockBuilderDockWindow((std::string(_L("Waterfall")) + "###Waterfall").c_str(), rmid);
+            ImGui::DockBuilderDockWindow((std::string(_L("Spectrum (B)")) + "###Spectrum (B)").c_str(), rtopR);
+            ImGui::DockBuilderDockWindow((std::string(_L("Waterfall (B)")) + "###Waterfall (B)").c_str(), rmidR);
         }
-        ImGui::DockBuilderDockWindow("Flight Map", rmid);
-        ImGui::DockBuilderDockWindow("SUs", rbot);
-        ImGui::DockBuilderDockWindow("Messages", rbot);
-        ImGui::DockBuilderDockWindow("C-Channel", rbot);
-        ImGui::DockBuilderDockWindow("Network", rbot);
-        ImGui::DockBuilderDockWindow("EGC", rbot);
-        ImGui::DockBuilderDockWindow("MES", rbot);
-        ImGui::DockBuilderDockWindow("LES", rbot);
-        ImGui::DockBuilderDockWindow("Aircraft", rbot);
-        ImGui::DockBuilderDockWindow("Voice Calls", rbot);
-        ImGui::DockBuilderDockWindow("LES Freq", rbot);
-        ImGui::DockBuilderDockWindow("Constellation", rcon);
+        ImGui::DockBuilderDockWindow((std::string(_L("Flight Map")) + "###Flight Map").c_str(), rmid);
+        ImGui::DockBuilderDockWindow((std::string(_L("SUs")) + "###SUs").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("Messages")) + "###Messages").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("C-Channel")) + "###C-Channel").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("Network")) + "###Network").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("EGC")) + "###EGC").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("MES")) + "###MES").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("LES")) + "###LES").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("Aircraft")) + "###Aircraft").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("Voice Calls")) + "###Voice Calls").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("LES Freq")) + "###LES Freq").c_str(), rbot);
+        ImGui::DockBuilderDockWindow((std::string(_L("Constellation")) + "###Constellation").c_str(), rcon);
         ImGui::DockBuilderFinish(dockId);
     }
 
     if (ImGui::BeginMenuBar())
     {
-        if (ImGui::BeginMenu("View"))
+        if (ImGui::BeginMenu(_L("View")))
         {
-            if (ImGui::MenuItem("Reset Layout"))
+            if (ImGui::MenuItem(_L("Reset Layout")))
                 forceLayout = true;
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Help"))
+        if (ImGui::BeginMenu(_L("Help")))
         {
-            if (ImGui::MenuItem("About"))
+            if (ImGui::BeginMenu(_L("Languages")))
+            {
+                for (int i = 0; i < (int)Lang::KOUNT; ++i)
+                {
+                    Lang l = (Lang)i;
+                    if (ImGui::MenuItem(i18nName(l), nullptr, app.languageIdx == i))
+                    {
+                        app.languageIdx = i;
+                        i18nSet(l);
+                    }
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::MenuItem(_L("About")))
                 app.showAbout = true;
             ImGui::EndMenu();
         }

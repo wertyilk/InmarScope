@@ -18,7 +18,7 @@
 // JAERO DSP config knob referenced by jaero_demod.cpp (0 = use the demod's
 // built-in default locking bandwidth).
 extern "C" {
-double oqpsk_lockingbw = 0.0;
+double oqpsk_lockingbw = 6000.0;
 }
 
 static double ddcRate(int baud)
@@ -29,12 +29,14 @@ static double ddcRate(int baud)
 
 static double ddcBw(int baud)
 {
-    // Signal bandwidth fb*(1+alpha): ~6 kHz for 600/1200 MSK, ~14 kHz for
-    // 8400 OQPSK (alpha 0.6), ~21 kHz for 10500 OQPSK (alpha 1.0).
+    // Per-channel DDC passband (double-sided). Tight 8400 value gives ~20 dB
+    // rejection of an adjacent C-channel at ±5 kHz while keeping most of the
+    // RRC alpha=0.6 tail energy.  OQPSK AFC locking bw is separately capped
+    // at 6 kHz so the demodulator can't wander to adjacent carriers.
     if (baud == 10500)
         return 21000.0;
     if (baud == 8400)
-        return 11000.0;
+        return 9000.0;
     return 6000.0;
 }
 
