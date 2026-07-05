@@ -243,6 +243,8 @@ if(WIN32)
         libvorbisenc-2.dll
         libsqlite3-0.dll
         libxml2-16.dll
+        libiconv-2.dll
+        liblzma-5.dll
     )
     if(AIRSPY_FOUND)
         list(APPEND FRAMESYNC_RUNTIME_DLLS libairspy.dll)

@@ -76,7 +76,8 @@ build/libgcc_s_seh-1.dll, libwinpthread-1.dll, libstdc++-6.dll,
       glfw3.dll, librtlsdr.dll, libhackrf.dll, libusb-1.0.dll,
       libzstd.dll, zlib1.dll, libogg-0.dll, libvorbis-0.dll,
       libvorbisenc-2.dll, libsqlite3-0.dll,
-      libxml2-16.dll, WebView2Loader.dll
+      libxml2-16.dll, libiconv-2.dll, liblzma-5.dll,
+      WebView2Loader.dll
 ```
 (plus `build/libairspy.dll` when Airspy support is enabled)
 
