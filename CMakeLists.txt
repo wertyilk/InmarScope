@@ -190,6 +190,7 @@ find_library(ZSTD_LIBRARIES NAMES zstd libzstd REQUIRED)
 find_library(ZLIB_LIB NAMES z libz zlib REQUIRED)
 find_library(SQLITE3_LIB NAMES sqlite3 libsqlite3 REQUIRED)
 find_library(XML2_LIB NAMES xml2 libxml2 REQUIRED)
+find_library(JANSSON_LIB NAMES jansson libjansson REQUIRED)
 
 # libogg + libvorbis for OGG Vorbis voice recording.
 if(PkgConfig_FOUND)
@@ -203,7 +204,7 @@ if(NOT OGG_FOUND OR NOT VORBIS_FOUND)
     find_library(VORBISENC_LIBRARIES NAMES vorbisenc libvorbisenc REQUIRED)
 endif()
 
-target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${WEBVIEW2_LIB} ${SQLITE3_LIB} ${XML2_LIB})
+target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${WEBVIEW2_LIB} ${SQLITE3_LIB} ${XML2_LIB} ${JANSSON_LIB})
 if(AIRSPY_FOUND)
     target_link_libraries(InmarScope PRIVATE ${AIRSPY_LIBRARIES})
 endif()
@@ -245,6 +246,7 @@ if(WIN32)
         libxml2-16.dll
         libiconv-2.dll
         liblzma-5.dll
+        libjansson-4.dll
     )
     if(AIRSPY_FOUND)
         list(APPEND FRAMESYNC_RUNTIME_DLLS libairspy.dll)
