@@ -24,6 +24,7 @@ using socket_t = int;
 #include <chrono>
 #include <cstring>
 #include <ctime>
+#include <sstream>
 
 namespace {
 #if defined(_WIN32)
@@ -59,6 +60,80 @@ void nowUnix(long& sec, long& usec)
     sec = (long)std::chrono::duration_cast<std::chrono::seconds>(now).count();
     usec = (long)(std::chrono::duration_cast<std::chrono::microseconds>(now).count() % 1000000);
 }
+} // namespace
+
+// ---- compact JSON (InmarScope native format) helpers ------------------
+
+namespace {
+
+void jsonStr(std::ostringstream& o, const std::string& s)
+{
+    o << '"';
+    for (char c : s)
+    {
+        if (c == '"' || c == '\\') { o << '\\' << c; }
+        else if (c == '\n') { o << "\\n"; }
+        else if (c == '\r') { o << "\\r"; }
+        else if (c == '\t') { o << "\\t"; }
+        else if ((unsigned char)c < 0x20) { char h[8]; std::snprintf(h, sizeof(h), "\\u%04x", (unsigned)c); o << h; }
+        else { o << c; }
+    }
+    o << '"';
+}
+
+std::string compactAcarsJson(const DecodedMessage& m)
+{
+    std::ostringstream o;
+    o << "{\"t\":" << (int64_t)m.timeSec << ",\"f\":" << m.freqMHz << ",\"a\":" << m.aesId << ",\"d\":" << m.downlink;
+    if (!m.label.empty()) { o << ",\"lb\":"; jsonStr(o, m.label); }
+    if (!m.reg.empty())   { o << ",\"rg\":"; jsonStr(o, m.reg); }
+    if (!m.text.empty())  { o << ",\"tx\":"; jsonStr(o, m.text); }
+    if (!m.icao.empty())  { o << ",\"ic\":"; jsonStr(o, m.icao); }
+    if (m.hasPos)         { o << ",\"la\":" << m.lat << ",\"lo\":" << m.lon << ",\"al\":" << m.alt; }
+    if (!m.decoded.empty()){ o << ",\"dc\":"; jsonStr(o, m.decoded); }
+    o << '}';
+    return o.str();
+}
+
+std::string compactSuJson(const DecodedMessage& m)
+{
+    std::ostringstream o;
+    o << "{\"t\":" << (int64_t)m.timeSec << ",\"f\":" << m.freqMHz << ",\"st\":" << (int)m.suType << ",\"a\":" << m.aesId;
+    if (!m.text.empty()) { o << ",\"tx\":"; jsonStr(o, m.text); }
+    if (!m.hex.empty())  { o << ",\"hx\":"; jsonStr(o, m.hex); }
+    o << '}';
+    return o.str();
+}
+
+std::string compactEgcJson(const EgcMessage& m)
+{
+    std::ostringstream o;
+    o << '{';
+    bool first = true;
+    if (!m.timeUtc.empty())  { if (!first) o << ','; o << "\"ut\":"; jsonStr(o, m.timeUtc); first = false; }
+    if (!m.service.empty()) { if (!first) o << ','; o << "\"sv\":"; jsonStr(o, m.service); first = false; }
+    if (!m.priority.empty()){ if (!first) o << ','; o << "\"pr\":"; jsonStr(o, m.priority); first = false; }
+    if (!first) o << ','; o << "\"f\":" << m.freqMHz; first = false;
+    if (!m.text.empty())    { if (!first) o << ','; o << "\"tx\":"; jsonStr(o, m.text); }
+    o << '}';
+    return o.str();
+}
+
+std::string compactLesJson(const LesMessage& m)
+{
+    std::ostringstream o;
+    o << '{';
+    bool first = true;
+    if (!m.timeUtc.empty())  { if (!first) o << ','; o << "\"ut\":"; jsonStr(o, m.timeUtc); first = false; }
+    if (!m.satName.empty())  { if (!first) o << ','; o << "\"sn\":"; jsonStr(o, m.satName); first = false; }
+    if (!m.lesLabel.empty()) { if (!first) o << ','; o << "\"ll\":"; jsonStr(o, m.lesLabel); first = false; }
+    if (!first) o << ','; o << "\"f\":" << m.freqMHz; first = false;
+    o << ",\"ch\":" << m.channel << ",\"pk\":" << m.pktNo << ",\"en\":" << (m.isEncrypted ? 1 : 0);
+    if (!m.text.empty())    { o << ",\"tx\":"; jsonStr(o, m.text); }
+    o << '}';
+    return o.str();
+}
+
 } // namespace
 
 MessageFeed::~MessageFeed()
@@ -375,6 +450,15 @@ void MessageFeed::feedAcars(const DecodedMessage& m)
         return;
     }
 
+    if (format_ == COMPACT_JSON)
+    {
+        if (m.suType != 0)
+            emit(compactSuJson(m));
+        else
+            emit(compactAcarsJson(m));
+        return;
+    }
+
     // JAERO JSONdump-compatible (Acarshub keys on app.name == "JAERO").
     char aes[8], ges[4];
     std::snprintf(aes, sizeof(aes), "%06X", m.aesId & 0xFFFFFF);
@@ -427,6 +511,12 @@ void MessageFeed::feedEgc(const EgcMessage& m)
         return;
     }
 
+    if (format_ == COMPACT_JSON)
+    {
+        emit(compactEgcJson(m));
+        return;
+    }
+
     // inmarsat-sniffer STD-C JSON schema.
     std::string s = "{\"source\":\"InmarScope\",\"type\":\"egc\"";
     s += ",\"service\":\"" + jsonEscape(m.service) + "\"";
@@ -459,6 +549,12 @@ void MessageFeed::feedLes(const LesMessage& m)
             for (char c : m.text) { if (c == '\r') continue; out += (c == '\n') ? "\n\t" : std::string(1, c); }
         }
         emit(out);
+        return;
+    }
+
+    if (format_ == COMPACT_JSON)
+    {
+        emit(compactLesJson(m));
         return;
     }
 

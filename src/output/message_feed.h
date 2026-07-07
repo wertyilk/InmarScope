@@ -14,7 +14,7 @@
 class MessageFeed
 {
 public:
-    enum Format { JSON = 0, JAERO_TEXT = 1 };
+    enum Format { JSON = 0, JAERO_TEXT = 1, COMPACT_JSON = 2 };
 
     ~MessageFeed();
 

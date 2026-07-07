@@ -647,8 +647,8 @@ void drawControls(App& app)
     ImGui::Separator();
     if (ImGui::CollapsingHeader(_L("Output (message feed)")))
     {
-        const char* fmts[] = {"JSON (JAERO/Acarshub)", "JAERO text"};
-        ImGui::Combo("Format", &app.outFormat, fmts, 2);
+        const char* fmts[] = {"JSON (JAERO/Acarshub)", "JAERO text", "JSON (InmarScope)"};
+        ImGui::Combo("Format", &app.outFormat, fmts, 3);
         ImGui::Checkbox("Write to file", &app.outFile);
         ImGui::SetNextItemWidth(-70.0f);
         ImGui::InputText("File", app.outFilePath, sizeof(app.outFilePath));
