@@ -1771,6 +1771,7 @@ void drawNetwork(App& app)
     ImGui::End();
 }
 
+#if defined(_WIN32)
 void drawFlightMap(App& app)
 {
     ImGui::Begin((std::string(_L("Flight Map")) + "###Flight Map").c_str());
@@ -1809,7 +1810,6 @@ void drawFlightMap(App& app)
         ImGui::TextDisabled("No aircraft with ICAO yet.");
     }
 
-#if defined(_WIN32)
     if (!app.flightMapWv.isReady())
     {
         ImGui::TextDisabled("  Loading map...");
@@ -1832,12 +1832,14 @@ void drawFlightMap(App& app)
         lastIcao = pick->icao;
         app.flightMapWv.setIcao(pick->icao);
     }
-#else
-    ImGui::TextDisabled("WebView2 map requires Windows.");
-#endif
 
     ImGui::End();
 }
+#else
+// The Flight Map is an embedded Edge WebView2 browser, which only exists on
+// Windows. On other platforms the panel is not registered or drawn at all.
+void drawFlightMap(App&) {}
+#endif // _WIN32
 
 void drawEgc(App& app)
 {
@@ -2591,7 +2593,9 @@ void drawDockHost(App& app)
             ImGui::DockBuilderDockWindow((std::string(_L("Spectrum (B)")) + "###Spectrum (B)").c_str(), rtopR);
             ImGui::DockBuilderDockWindow((std::string(_L("Waterfall (B)")) + "###Waterfall (B)").c_str(), rmidR);
         }
+#if defined(_WIN32)
         ImGui::DockBuilderDockWindow((std::string(_L("Flight Map")) + "###Flight Map").c_str(), rmid);
+#endif
         ImGui::DockBuilderDockWindow((std::string(_L("SUs")) + "###SUs").c_str(), rbot);
         ImGui::DockBuilderDockWindow((std::string(_L("Messages")) + "###Messages").c_str(), rbot);
         ImGui::DockBuilderDockWindow((std::string(_L("C-Channel")) + "###C-Channel").c_str(), rbot);

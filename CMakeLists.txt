@@ -168,18 +168,22 @@ add_executable(InmarScope
     src/update/version_check.cpp
     src/web/flight_map_webview.cpp
 )
-# Microsoft Edge WebView2 for the embedded Flight Map browser.
-set(WEBVIEW2_ROOT ${CMAKE_SOURCE_DIR}/third_party/webview2/build/native)
-find_library(WEBVIEW2_LIB WebView2Loader.dll PATHS ${WEBVIEW2_ROOT}/x64 NO_DEFAULT_PATH REQUIRED)
+# Microsoft Edge WebView2 for the embedded Flight Map browser (Windows only).
+if(WIN32)
+    set(WEBVIEW2_ROOT ${CMAKE_SOURCE_DIR}/third_party/webview2/build/native)
+    find_library(WEBVIEW2_LIB WebView2Loader.dll PATHS ${WEBVIEW2_ROOT}/x64 NO_DEFAULT_PATH REQUIRED)
+endif()
 target_include_directories(InmarScope PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/third_party/mbelib
     ${CMAKE_SOURCE_DIR}/third_party/miniaudio
     ${CMAKE_SOURCE_DIR}/third_party/libacars
-    ${WEBVIEW2_ROOT}/include
     ${RTLSDR_INCLUDE_DIRS}
     ${HACKRF_INCLUDE_DIRS}
 )
+if(WIN32)
+    target_include_directories(InmarScope PRIVATE ${WEBVIEW2_ROOT}/include)
+endif()
 target_compile_definitions(InmarScope PRIVATE _USE_MATH_DEFINES)
 if(AIRSPY_FOUND)
     target_sources(InmarScope PRIVATE src/sdr/airspy_source.cpp)
@@ -204,7 +208,12 @@ if(NOT OGG_FOUND OR NOT VORBIS_FOUND)
     find_library(VORBISENC_LIBRARIES NAMES vorbisenc libvorbisenc REQUIRED)
 endif()
 
-target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${WEBVIEW2_LIB} ${SQLITE3_LIB} ${XML2_LIB} ${JANSSON_LIB})
+target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${SQLITE3_LIB} ${XML2_LIB} ${JANSSON_LIB})
+if(WIN32)
+    target_link_libraries(InmarScope PRIVATE ${WEBVIEW2_LIB})
+endif()
+find_package(Threads REQUIRED)
+target_link_libraries(InmarScope PRIVATE Threads::Threads)
 if(AIRSPY_FOUND)
     target_link_libraries(InmarScope PRIVATE ${AIRSPY_LIBRARIES})
 endif()

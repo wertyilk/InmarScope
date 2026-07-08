@@ -60,7 +60,46 @@ bool openWavDialog(char* out, int outLen)
     return false;
 }
 #else
-bool openWavDialog(char*, int) { return false; }
+#include <cstdio>
+#include <cstring>
+
+// Native file picker via the desktop's dialog helper (zenity / kdialog / qarma).
+// These ship with GNOME/KDE and most distros; avoids adding a GUI toolkit dep.
+bool openWavDialog(char* out, int outLen)
+{
+    const char* cmds[] = {
+        "zenity --file-selection "
+            "--file-filter='WAV / IQ files | *.wav *.WAV' "
+            "--file-filter='All files | *' 2>/dev/null",
+        "qarma --file-selection "
+            "--file-filter='WAV / IQ files | *.wav *.WAV' "
+            "--file-filter='All files | *' 2>/dev/null",
+        "kdialog --getopenfilename . "
+            "'WAV / IQ files (*.wav *.WAV)|All files (*)' 2>/dev/null",
+    };
+    for (const char* cmd : cmds)
+    {
+        FILE* p = popen(cmd, "r");
+        if (!p)
+            continue;
+        char buf[1024] = "";
+        char* got = std::fgets(buf, sizeof(buf), p);
+        int rc = pclose(p);
+        // 127 == shell couldn't find the helper; try the next one.
+        if (rc == 127 || !got)
+            continue;
+        // Strip trailing newline.
+        size_t n = std::strlen(buf);
+        while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+            buf[--n] = 0;
+        if (n == 0)
+            return false; // helper ran, user cancelled
+        std::strncpy(out, buf, outLen - 1);
+        out[outLen - 1] = 0;
+        return true;
+    }
+    return false;
+}
 #endif
 
 static void glfw_error_callback(int error, const char* description)

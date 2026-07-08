@@ -1,4 +1,13 @@
-# Building InmarScope on Windows
+# Building InmarScope
+
+InmarScope builds on both **Windows** and **Linux**. Windows is the primary
+target (it also provides the embedded WebView2 Flight Map); Linux builds are
+fully supported minus the WebView2 map, which falls back to a text notice.
+
+- [Building on Windows](#building-on-windows)
+- [Building on Linux](#building-on-linux)
+
+# Building on Windows
 
 InmarScope is built with the **MSYS2 / MinGW-w64** toolchain (GCC 15.x) using
 **CMake** and **Ninja**. The build is reproducible from a clean MSYS2 install.
@@ -122,3 +131,81 @@ keeps the current directory.
   build steps. (Avoid `--clean-first`; it wipes the vendored objects and forces
   the slow `implot_items.cpp` recompile.)
 ```
+
+# Building on Linux
+
+InmarScope builds natively on Linux with **GCC/Clang**, **CMake**, and
+**Ninja**. The build uses the same `CMakeLists.txt` as Windows; the WebView2
+Flight Map is Windows-only and is automatically skipped — the Flight Map panel
+is hidden entirely on Linux. Everything else (decoding, voice,
+spectrum/waterfall, web dashboard, SBS output) works.
+
+## 1. Install build tools and dependencies
+
+On **Debian / Ubuntu**:
+
+```bash
+sudo apt-get install -y \
+  build-essential cmake ninja-build pkg-config \
+  libglfw3-dev libgl1-mesa-dev \
+  librtlsdr-dev libhackrf-dev libusb-1.0-0-dev \
+  libzstd-dev zlib1g-dev \
+  libogg-dev libvorbis-dev \
+  libsqlite3-dev libxml2-dev libjansson-dev
+```
+
+On **Arch / Manjaro**:
+
+```bash
+sudo pacman -S --needed \
+  base-devel cmake ninja pkgconf \
+  glfw rtl-sdr hackrf libusb \
+  zstd zlib libogg libvorbis \
+  sqlite libxml2 jansson
+```
+
+On **Fedora**:
+
+```bash
+sudo dnf install -y \
+  gcc-c++ cmake ninja-build pkgconf-pkg-config \
+  glfw-devel mesa-libGL-devel \
+  rtl-sdr-devel hackrf-devel libusb1-devel \
+  libzstd-devel zlib-devel \
+  libogg-devel libvorbis-devel \
+  sqlite-devel libxml2-devel jansson-devel
+```
+
+As on Windows, all remaining dependencies (Dear ImGui, ImPlot, the JAERO DSP,
+mbelib, libacars, miniaudio) are vendored in `third_party/` — no submodules
+needed.
+
+### Optional: Airspy support
+
+Install `libairspy-dev` (Debian/Ubuntu), `airspy` (Arch), or `airspy-devel`
+(Fedora). The build enables Airspy (`HAS_AIRSPY=1`) automatically when libairspy
+is found by CMake.
+
+## 2. Configure and build
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+ninja -C build
+```
+
+Run it from the project root (so it finds the bundled font under
+`third_party/imgui/misc/fonts/`):
+
+```bash
+./build/InmarScope
+```
+
+## Notes / troubleshooting
+
+- **First build is slow (~1 min on `implot_items.cpp`).** Same template-heavy
+  file as on Windows; CMakeLists.txt already caps it at `-O1`.
+- **No Flight Map.** Expected — WebView2 is Windows-only, so the Flight Map tab
+  is hidden on Linux. The rest of the app is unaffected.
+- **RTL-SDR / HackRF permissions.** Install the vendors' udev rules (e.g.
+  `/etc/udev/rules.d/`) or run as a user in the `plugdev` group so the device is
+  accessible without root.

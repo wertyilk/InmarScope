@@ -14,7 +14,6 @@
 #undef max
 #endif
 #include <WebView2.h>
-#endif
 
 #include <cstdio>
 #include <string>
@@ -136,3 +135,18 @@ void FlightMapWebView::setBounds(int x, int y, int w, int h, bool visible) {
 }
 
 bool FlightMapWebView::isReady() const { return impl_ && impl_->ready; }
+
+#else // !_WIN32
+
+// Non-Windows platforms have no embedded WebView2 browser. Provide no-op stubs
+// so the rest of the application builds and links unchanged; the Flight Map
+// panel is not drawn on these platforms (see gui_panels.cpp).
+struct FlightMapWebView::Impl {};
+
+FlightMapWebView::~FlightMapWebView() { delete impl_; }
+void FlightMapWebView::init(void*) {}
+void FlightMapWebView::setIcao(const std::string&) {}
+void FlightMapWebView::setBounds(int, int, int, int, bool) {}
+bool FlightMapWebView::isReady() const { return false; }
+
+#endif // _WIN32
