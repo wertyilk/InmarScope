@@ -249,6 +249,9 @@ struct App
     // Font size (pt), persisted — requires restart to take effect.
     int  fontSize = 17;
 
+    // UI theme: dark (default) or light.
+    bool lightMode = false;
+
     // Language index (0 = English).  Persisted, applied at next startup.
     int  languageIdx = 0;
 

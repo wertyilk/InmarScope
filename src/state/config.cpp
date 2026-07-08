@@ -70,6 +70,7 @@ void cfgWriteAll(App& app, ImGuiTextBuffer* buf)
     WI(layoutVersion);
     WI(fontSize);
     WI(languageIdx);
+    WI(lightMode);
     for (auto& cc : app.blacklistCountries)
         buf->appendf("blacklistCC=%s\n", cc.c_str());
     if (app.saveDecoders)
@@ -150,6 +151,7 @@ void cfgReadLine(App& app, const char* line)
     RI(layoutVersion);
     RI(fontSize);
     RI(languageIdx);
+    RB(lightMode);
     if (!std::strcmp(key, "blacklistCC") && val[0] && val[1] && !val[2])
     {
         std::string cc(val, 2);

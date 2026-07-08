@@ -140,7 +140,6 @@ int main(int, char**)
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    ImGui::StyleColorsDark();
     App app;
 
     // Load persisted settings BEFORE building the font atlas so fontSize
@@ -148,6 +147,25 @@ int main(int, char**)
     cfgRegisterHandler(app);
     io.IniFilename = "inmarscope.ini";
     ImGui::LoadIniSettingsFromDisk(io.IniFilename);
+
+    // Apply persisted theme.
+    if (app.lightMode)
+    {
+        ImGui::StyleColorsLight();
+        // Darken light theme for readability — default StyleColorsLight() is
+        // too low-contrast on most monitors.
+        ImGuiStyle& st = ImGui::GetStyle();
+        st.Colors[ImGuiCol_Text]                  = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+        st.Colors[ImGuiCol_TextDisabled]           = ImVec4(0.36f, 0.36f, 0.36f, 1.00f);
+        st.Colors[ImGuiCol_WindowBg]               = ImVec4(0.94f, 0.94f, 0.94f, 1.00f);
+        st.Colors[ImGuiCol_TableHeaderBg]          = ImVec4(0.73f, 0.73f, 0.73f, 1.00f);
+        st.Colors[ImGuiCol_TableRowBg]             = ImVec4(0.97f, 0.97f, 0.97f, 1.00f);
+        st.Colors[ImGuiCol_TableRowBgAlt]          = ImVec4(0.88f, 0.88f, 0.88f, 1.00f);
+        // Frame backgrounds (combos, inputs) need to stay distinguishable.
+        st.Colors[ImGuiCol_FrameBg]                = ImVec4(0.85f, 0.85f, 0.85f, 1.00f);
+    }
+    else
+        ImGui::StyleColorsDark();
 
     // Language and font size.  Both require a restart to take full effect
     // for the font atlas, but strings pass through _L() immediately.

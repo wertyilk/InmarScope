@@ -21,8 +21,17 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
+
+// Light-mode colour dimmer — accent colours that work on a dark background
+// are too washed-out on a white one.  Halve the RGB channels when in light mode.
+inline ImVec4 Lc(const App& app, const ImVec4& c) {
+    if (!app.lightMode) return c;
+    return ImVec4(c.x * 0.44f, c.y * 0.56f, c.z * 0.44f, c.w);
+}
+
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -433,7 +442,7 @@ void drawControls(App& app)
     if (app.sourceMode == 4)
     {
         // ---- Dual RTL: two independent RTL-SDRs ----
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "RTL A (Spectrum / Waterfall A)");
+        ImGui::TextColored(Lc(app, ImVec4(0.4f, 0.8f, 1.0f, 1.0f)), "RTL A (Spectrum / Waterfall A)");
         ImGui::Separator();
         if (ImGui::Button("Refresh A"))
             app.devices = app.sdr.listDevices();
@@ -576,9 +585,12 @@ void drawControls(App& app)
 
     ImGui::Separator();
     const char* bauds[] = {"600", "1200", "8400", "10500", "Inmarsat-C/EGC"};
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.18f, 0.42f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.15f, 0.28f, 0.60f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.12f, 0.22f, 0.50f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, app.lightMode
+        ? ImVec4(0.70f, 0.78f, 0.90f, 1.0f) : ImVec4(0.10f, 0.18f, 0.42f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, app.lightMode
+        ? ImVec4(0.78f, 0.85f, 0.95f, 1.0f) : ImVec4(0.15f, 0.28f, 0.60f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, app.lightMode
+        ? ImVec4(0.65f, 0.73f, 0.88f, 1.0f) : ImVec4(0.12f, 0.22f, 0.50f, 1.0f));
     ImGui::Combo(_L("Decode baud"), &app.newBaud, bauds, 5);
     ImGui::PopStyleColor(3);
     ImGui::TextDisabled("Ctrl+click the spectrum to add a decoder there");
@@ -636,6 +648,23 @@ void drawControls(App& app)
     ImGui::Separator();
     if (ImGui::CollapsingHeader(_L("Display")))
     {
+        if (ImGui::Checkbox(_L("Light mode"), &app.lightMode))
+        {
+            if (app.lightMode)
+            {
+                ImGui::StyleColorsLight();
+                ImGuiStyle& st = ImGui::GetStyle();
+                st.Colors[ImGuiCol_Text]                  = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+                st.Colors[ImGuiCol_TextDisabled]           = ImVec4(0.36f, 0.36f, 0.36f, 1.00f);
+                st.Colors[ImGuiCol_WindowBg]               = ImVec4(0.94f, 0.94f, 0.94f, 1.00f);
+                st.Colors[ImGuiCol_TableHeaderBg]          = ImVec4(0.73f, 0.73f, 0.73f, 1.00f);
+                st.Colors[ImGuiCol_TableRowBg]             = ImVec4(0.97f, 0.97f, 0.97f, 1.00f);
+                st.Colors[ImGuiCol_TableRowBgAlt]          = ImVec4(0.88f, 0.88f, 0.88f, 1.00f);
+                st.Colors[ImGuiCol_FrameBg]                = ImVec4(0.85f, 0.85f, 0.85f, 1.00f);
+            }
+            else
+                ImGui::StyleColorsDark();
+        }
         if (ImGui::SliderInt(_L("Font size"), &app.fontSize, 8, 24, "%d", ImGuiSliderFlags_AlwaysClamp))
         {
             if (app.fontSize < 8)  app.fontSize = 8;
@@ -1234,7 +1263,7 @@ void drawDecoders(App& app)
             char selid[24];
             std::snprintf(selid, sizeof(selid), "##sel%d", uid);
             ImVec4 c = d.monitored ? ImVec4(0.3f, 0.5f, 1.0f, 1.0f)
-                     : d.locked    ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f)
+                     : d.locked    ? Lc(app, ImVec4(0.2f, 1.0f, 0.3f, 1.0f))
                                    : ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
             ImGui::PushStyleColor(ImGuiCol_Header, c);
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(c.x*1.3f, c.y*1.3f, c.z*1.3f, 1.0f));
@@ -1268,8 +1297,8 @@ void drawDecoders(App& app)
                 if (d.egcFrames > 0)
                 {
                     ImVec4 berCol = d.egcBer < 0  ? ImVec4(0.5f, 0.5f, 0.5f, 1.0f)
-                                  : d.egcBer <= 10 ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f)
-                                  : d.egcBer <= 50 ? ImVec4(1.0f, 0.85f, 0.2f, 1.0f)
+                                  : d.egcBer <= 10 ? Lc(app, ImVec4(0.2f, 1.0f, 0.3f, 1.0f))
+                                  : d.egcBer <= 50 ? Lc(app, ImVec4(1.0f, 0.85f, 0.2f, 1.0f))
                                                    : ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
                     ImGui::TextColored(berCol, "BER %d (%dfr)", d.egcBer, d.egcFrames);
                 }
@@ -1282,8 +1311,8 @@ void drawDecoders(App& app)
                 if (d.baud == 600 || d.baud == 1200) { loRed = 5.0; hiGreen = 8.0; }
                 else                                 { loRed = 4.0; hiGreen = 6.0; }
                 ImVec4 ebCol = d.ebno < loRed  ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f)
-                             : d.ebno < hiGreen ? ImVec4(1.0f, 0.85f, 0.2f, 1.0f)
-                                                : ImVec4(0.2f, 1.0f, 0.3f, 1.0f);
+                             : d.ebno < hiGreen ? Lc(app, ImVec4(1.0f, 0.85f, 0.2f, 1.0f))
+                                                : Lc(app, ImVec4(0.2f, 1.0f, 0.3f, 1.0f));
                 ImGui::TextColored(ebCol, "%.1f", d.ebno);
             }
             ImGui::TableNextColumn();
@@ -1398,9 +1427,9 @@ void drawSUs(App& app)
                 ImGui::ColorConvertHSVtoRGB(hue, 0.8f, 0.9f, col.x, col.y, col.z);
             }
             else if (it->suType == 0x21)                    // Call announcement
-                col = ImVec4(1.0f, 0.85f, 0.2f, 1.0f);     // gold
+                col = Lc(app, ImVec4(1.0f, 0.85f, 0.2f, 1.0f));     // gold
             else if (it->suType >= 0x31 && it->suType <= 0x34) // C-channel assignment
-                col = ImVec4(0.3f, 0.7f, 1.0f, 1.0f);     // blue
+                col = Lc(app, ImVec4(0.3f, 0.7f, 1.0f, 1.0f));     // blue
 
             ImGui::TableNextColumn();
             ImGui::Text("%.3f", it->freqMHz);
@@ -1539,7 +1568,7 @@ void drawMessages(App& app)
                                    "POS %.4f, %.4f  %d ft", it->lat, it->lon, it->alt);
             if (!it->decoded.empty())
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 1.0f, 0.6f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, Lc(app, ImVec4(0.6f, 1.0f, 0.6f, 1.0f)));
                 ImGui::TextWrapped("%s", it->decoded.c_str());
                 ImGui::PopStyleColor();
             }
@@ -2302,7 +2331,7 @@ void drawVoiceCalls(App& app)
 
             ImGui::TableNextColumn();
             if (!c.icao.empty())
-                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%s", c.icao.c_str());
+                ImGui::TextColored(Lc(app, ImVec4(1.0f, 0.85f, 0.3f, 1.0f)), "%s", c.icao.c_str());
             else if (c.aesId)
                 ImGui::TextDisabled("%06X", c.aesId);
             else
