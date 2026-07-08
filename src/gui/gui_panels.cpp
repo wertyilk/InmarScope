@@ -1521,10 +1521,11 @@ void drawMessages(App& app)
         searchLower = app.searchBuf;
         for (auto& ch : searchLower) ch = (char)std::tolower((unsigned char)ch);
     }
-    if (ImGui::BeginTable("##msgs", 6,
+    if (ImGui::BeginTable("##msgs", 7,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable))
     {
+        ImGui::TableSetupColumn("UTC", ImGuiTableColumnFlags_WidthFixed, 54);
         ImGui::TableSetupColumn("Freq", ImGuiTableColumnFlags_WidthFixed, 64);
         ImGui::TableSetupColumn("Dir", ImGuiTableColumnFlags_WidthFixed, 32);
         ImGui::TableSetupColumn("Reg", ImGuiTableColumnFlags_WidthFixed, 70);
@@ -1551,6 +1552,18 @@ void drawMessages(App& app)
             }
             ImGui::TableNextRow();
             ImGui::PushID(rowIdx++);
+            ImGui::TableNextColumn();
+            // UTC time from epoch seconds
+            {
+                time_t t = (time_t)it->timeSec;
+                std::tm tm{};
+#if defined(_WIN32)
+                gmtime_s(&tm, &t);
+#else
+                gmtime_r(&t, &tm);
+#endif
+                ImGui::TextDisabled("%02d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
+            }
             ImGui::TableNextColumn();
             ImGui::Text("%.3f", it->freqMHz);
             ImGui::TableNextColumn();
