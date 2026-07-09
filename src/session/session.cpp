@@ -176,6 +176,19 @@ void startActive(App& app)
         ok = app.airspy.start(app.deviceIndex, cb, err);
     }
 #endif
+    else if (app.sourceMode == 6)
+    {
+        // RTL-TCP network source
+        app.active = &app.rtltcp;
+        app.rtltcp.setHost(app.rtlTcpHost);
+        app.rtltcp.setPort((uint16_t)app.rtlTcpPort);
+        app.rtltcp.setSampleRate(kRates[app.sampleRateIdx]);
+        app.rtltcp.setCenterFreq(app.centerFreqMHz * 1e6);
+        app.rtltcp.setGain(app.autoGain ? -1.0 : (double)app.gainDb);
+        app.rtltcp.setBiasTee(app.biasTee);
+        app.rtltcp.setPpm((double)app.ppm);
+        ok = app.rtltcp.start(0, cb, err);
+    }
 
     if (ok)
     {

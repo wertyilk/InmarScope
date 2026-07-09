@@ -11,6 +11,7 @@
 #endif
 #include "sdr/wav_file_source.h"
 #include "sdr/sdrpp_server_source.h"
+#include "sdr/rtl_tcp_source.h"
 #include "sdr/iq_recorder.h"
 #include "audio/audio_player.h"
 #include "web/web_server.h"
@@ -62,11 +63,12 @@ struct App
     WavFileSource   wav;
     SdrppServerSource server;
     HackRfSource    hack;
+    RtlTcpSource    rtltcp;
 #ifdef HAS_AIRSPY
     AirspySource    airspy;
 #endif
     SdrSource*      active = &sdr;
-    int  sourceMode = 0; // 0=RTL, 1=WAV, 2=SDR++ Server, 3=HackRF, 4=Dual RTL, 5=Airspy
+    int  sourceMode = 0; // 0=RTL, 1=WAV, 2=SDR++ Server, 3=HackRF, 4=Dual RTL, 5=Airspy, 6=RTL-TCP
     char wavPath[512] = "";
     bool wavLoop = true;
     char serverHost[128] = "localhost";
@@ -74,6 +76,8 @@ struct App
     bool serverCompression = true;
     int  serverSampleType = 1;
     double serverSampleRateMHz = 2.0;
+    char rtlTcpHost[128] = "127.0.0.1";
+    int  rtlTcpPort = 1234;
 
     // HackRF
     double hackSampleRateMHz = 10.0;

@@ -49,11 +49,11 @@ void drawControls(App& app)
 
     ImGui::BeginDisabled(running);
 #ifdef HAS_AIRSPY
-    const char* modes[] = {"RTL-SDR", "WAV file", "SDR++ Server", "HackRF", "Dual RTL", "Airspy"};
-    ImGui::Combo(_L("Source"), &app.sourceMode, modes, 6);
+    const char* modes[] = {"RTL-SDR", "WAV file", "SDR++ Server", "HackRF", "Dual RTL", "Airspy", "RTL-TCP"};
+    ImGui::Combo(_L("Source"), &app.sourceMode, modes, 7);
 #else
-    const char* modes[] = {"RTL-SDR", "WAV file", "SDR++ Server", "HackRF", "Dual RTL"};
-    ImGui::Combo(_L("Source"), &app.sourceMode, modes, 5);
+    const char* modes[] = {"RTL-SDR", "WAV file", "SDR++ Server", "HackRF", "Dual RTL", "RTL-TCP"};
+    ImGui::Combo(_L("Source"), &app.sourceMode, modes, 6);
 #endif
     ImGui::EndDisabled();
 
@@ -439,6 +439,45 @@ void drawControls(App& app)
         }
     }
 #endif
+    if (app.sourceMode == 6)
+    {
+        // ---- RTL-TCP (network) ----
+        ImGui::SetNextItemWidth(-60.0f);
+        ImGui::InputText("Host", app.rtlTcpHost, sizeof(app.rtlTcpHost));
+        ImGui::InputInt("Port", &app.rtlTcpPort);
+        if (app.rtlTcpPort < 1) app.rtlTcpPort = 1234;
+        ImGui::Separator();
+        if (ImGui::InputDouble("Center (MHz)", &app.centerFreqMHz, 0.1, 1.0, "%.4f"))
+        {
+            app.viewA.resetView = true;
+            if (running) app.rtltcp.setCenterFreq(app.centerFreqMHz * 1e6);
+        }
+        if (ImGui::Combo(_L("Sample rate (MHz)"), &app.sampleRateIdx, kRateLabels, kNumRates))
+        {
+            app.viewA.resetView = true;
+            if (running) app.rtltcp.setSampleRate(kRates[app.sampleRateIdx]);
+        }
+        if (ImGui::Checkbox(_L("Auto gain (AGC)"), &app.autoGain))
+        {
+            if (running) app.rtltcp.setGain(app.autoGain ? -1.0 : (double)app.gainDb);
+        }
+        if (!app.autoGain)
+        {
+            if (ImGui::SliderFloat("Gain (dB)", &app.gainDb, 0.0f, 50.0f, "%.1f"))
+            {
+                if (running) app.rtltcp.setGain((double)app.gainDb);
+            }
+        }
+        if (ImGui::Checkbox(_L("Bias-T"), &app.biasTee))
+        {
+            if (running) app.rtltcp.setBiasTee(app.biasTee);
+        }
+        if (ImGui::InputFloat("PPM", &app.ppm, 0.1f, 1.0f, "%.2f"))
+        {
+            if (running) app.rtltcp.setPpm((double)app.ppm);
+        }
+        ImGui::TextDisabled("Remote rtl_tcp server. Connect and stream.");
+    }
     if (app.sourceMode == 4)
     {
         // ---- Dual RTL: two independent RTL-SDRs ----

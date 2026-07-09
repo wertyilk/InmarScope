@@ -143,6 +143,7 @@ add_executable(InmarScope
     src/state/config.cpp
     src/sdr/rtl_sdr_source.cpp
     src/sdr/hackrf_source.cpp
+    src/sdr/rtl_tcp_source.cpp
     
     src/sdr/wav_file_source.cpp
     src/sdr/sdrpp_server_source.cpp
