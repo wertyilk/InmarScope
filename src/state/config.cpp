@@ -50,6 +50,7 @@ void cfgWriteAll(App& app, ImGuiTextBuffer* buf)
     WS(wavPath); WI(wavLoop);
     WS(serverHost); WI(serverPort); WI(serverCompression); WI(serverSampleType);
     WD(serverSampleRateMHz);
+    WS(rtlTcpHost); WI(rtlTcpPort);
     WD(hackSampleRateMHz); WI(hackLna); WI(hackVga); WI(hackAmp); WI(hackBias);
 #ifdef HAS_AIRSPY
     WI(airspySampleRateIdx); WI(airspyGainMode); WI(airspySenseGain); WI(airspyLinearGain);
@@ -117,6 +118,7 @@ void cfgReadLine(App& app, const char* line)
     RS(wavPath); RB(wavLoop);
     RS(serverHost); RI(serverPort); RB(serverCompression); RI(serverSampleType);
     RD(serverSampleRateMHz);
+    RS(rtlTcpHost); RI(rtlTcpPort);
     RD(hackSampleRateMHz); RI(hackLna); RI(hackVga); RB(hackAmp); RB(hackBias);
 #ifdef HAS_AIRSPY
     RI(airspySampleRateIdx); RI(airspyGainMode); RI(airspySenseGain); RI(airspyLinearGain);
