@@ -1,6 +1,6 @@
 # InmarScope
 
-Multi-protocol L-band satellite communications decoder for Windows.
+Multi-protocol L-band satellite communications decoder for Windows (and linux if you compile it).
 
 Decodes Inmarsat Aero (Classic Aero, Aero-H/H+) and Inmarsat-C/EGC signals in real time using RTL-SDR, HackRF, or SDR++ server sources. Voice call recording, aircraft tracking, and message output in one application.
 
