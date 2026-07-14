@@ -15,28 +15,28 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-
+    
     - name: Set up MSYS2
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: MINGW64
-        update: true
-        install: >-
-          mingw-w64-x86_64-toolchain
-          mingw-w64-x86_64-cmake
-          mingw-w64-x86_64-ninja
-          mingw-w64-x86_64-pkgconf
-          mingw-w64-x86_64-glfw
-          mingw-w64-x86_64-rtl-sdr
-          mingw-w64-x86_64-hackrf
-          mingw-w64-x86_64-libusb
-          mingw-w64-x86_64-zstd
-          mingw-w64-x86_64-libogg
-          mingw-w64-x86_64-libvorbis
-          mingw-w64-x86_64-sqlite3
-          mingw-w64-x86_64-libxml2
-          mingw-w64-x86_64-jansson
-          mingw-w64-x86_64-libairspy
+          uses: msys2/setup-msys2@v2
+          with:
+            msystem: MINGW64
+            update: true
+            install: >-
+              mingw-w64-x86_64-toolchain
+              mingw-w64-x86_64-cmake
+              mingw-w64-x86_64-ninja
+              mingw-w64-x86_64-pkgconf
+              mingw-w64-x86_64-glfw
+              mingw-w64-x86_64-rtl-sdr
+              mingw-w64-x86_64-hackrf
+              mingw-w64-x86_64-libusb
+              mingw-w64-x86_64-zstd
+              mingw-w64-x86_64-libogg
+              mingw-w64-x86_64-libvorbis
+              mingw-w64-x86_64-sqlite3
+              mingw-w64-x86_64-libxml2
+              mingw-w64-x86_64-jansson
+              mingw-w64-x86_64-airspy
 
     - name: Configure and Build
       shell: msys2 {0}
