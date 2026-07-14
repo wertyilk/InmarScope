@@ -36,7 +36,6 @@ jobs:
           mingw-w64-x86_64-sqlite3
           mingw-w64-x86_64-libxml2
           mingw-w64-x86_64-jansson
-          mingw-w64-x86_64-airspy
 
     - name: Configure and Build
       shell: msys2 {0}
@@ -69,8 +68,7 @@ jobs:
           librtlsdr-dev libhackrf-dev libusb-1.0-0-dev \
           libzstd-dev zlib1g-dev \
           libogg-dev libvorbis-dev \
-          libsqlite3-dev libxml2-dev libjansson-dev \
-          libairspy-dev
+          libsqlite3-dev libxml2-dev libjansson-dev
 
     - name: Configure and Build
       run: |
