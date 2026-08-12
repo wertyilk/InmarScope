@@ -128,6 +128,10 @@ target_include_directories(mbelib PUBLIC ${CMAKE_SOURCE_DIR}/third_party/mbelib)
 # MIAM, media-advisory). Built via its own CMake as the acars_static target.
 # Examples are skipped (LA_BUILD_EXAMPLES off).
 # ---------------------------------------------------------------------------
+# libacars' static target does not propagate its optional library dependencies,
+# so find Jansson here and link it explicitly below.
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/third_party/libacars/libacars)
+find_package(Jansson REQUIRED)
 set(LA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/libacars ${CMAKE_BINARY_DIR}/libacars EXCLUDE_FROM_ALL)
 
@@ -195,8 +199,6 @@ find_library(ZSTD_LIBRARIES NAMES zstd libzstd REQUIRED)
 find_library(ZLIB_LIB NAMES z libz zlib REQUIRED)
 find_library(SQLITE3_LIB NAMES sqlite3 libsqlite3 REQUIRED)
 find_library(XML2_LIB NAMES xml2 libxml2 REQUIRED)
-# jansson is NOT used anywhere in the codebase — don't find or link it at all.
-# linking it would embed a Homebrew keg-only path, breaking portability.
 
 # libogg + libvorbis for OGG Vorbis voice recording.
 if(PkgConfig_FOUND)
@@ -222,7 +224,7 @@ else()
     endif()
 endif()
 
-target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${SQLITE3_LIB} ${XML2_LIB})
+target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${SQLITE3_LIB} ${XML2_LIB} ${JANSSON_LIBRARIES})
 if(WIN32)
     target_link_libraries(InmarScope PRIVATE ${WEBVIEW2_LIB})
 endif()

@@ -244,7 +244,7 @@ brew install \
 
 - `glfw` provides windowing; OpenGL ships with the OS (deprecated since 10.14
   but fully supported — the build silences the deprecation warnings).
-- `jansson` is optional and linked only when found; the rest are required.
+- `jansson` is required by the vendored libacars static library and is linked explicitly by the application.
 - Same as elsewhere: Dear ImGui, ImPlot, the JAERO DSP, mbelib, libacars and
   miniaudio are all vendored in `third_party/` — no submodules.
 
