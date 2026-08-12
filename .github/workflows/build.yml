@@ -106,8 +106,13 @@ jobs:
       run: |
         codesign --force --deep --sign - build/InmarScope.app
 
+    - name: Package macOS App Bundle
+      run: |
+        cd build
+        zip -r InmarScope-macOS-arm64.zip InmarScope.app
+
     - name: Upload macOS Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: InmarScope-macOS-arm64
-        path: build/InmarScope.app
+        path: build/InmarScope-macOS-arm64.zip
