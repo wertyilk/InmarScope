@@ -62,12 +62,19 @@ bool openWavDialog(char* out, int outLen)
 #else
 #include <cstdio>
 #include <cstring>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <climits>
+#endif
 
-// Native file picker via the desktop's dialog helper (zenity / kdialog / qarma).
-// These ship with GNOME/KDE and most distros; avoids adding a GUI toolkit dep.
+// Native file picker via the desktop's dialog helper (zenity / kdialog / qarma /
+// osascript). These ship with GNOME/KDE and most distros; avoids adding a GUI
+// toolkit dep. On macOS, osascript talks to Finder's native open panel.
 bool openWavDialog(char* out, int outLen)
 {
-    const char* cmds[] = {
+#if defined(__APPLE__)
+    const char* const cmds[] = {
+        "osascript -e 'POSIX path of (choose file with prompt \"Select WAV / IQ recording\")' 2>/dev/null",
         "zenity --file-selection "
             "--file-filter='WAV / IQ files | *.wav *.WAV' "
             "--file-filter='All files | *' 2>/dev/null",
@@ -77,6 +84,18 @@ bool openWavDialog(char* out, int outLen)
         "kdialog --getopenfilename . "
             "'WAV / IQ files (*.wav *.WAV)|All files (*)' 2>/dev/null",
     };
+#else
+    const char* const cmds[] = {
+        "zenity --file-selection "
+            "--file-filter='WAV / IQ files | *.wav *.WAV' "
+            "--file-filter='All files | *' 2>/dev/null",
+        "qarma --file-selection "
+            "--file-filter='WAV / IQ files | *.wav *.WAV' "
+            "--file-filter='All files | *' 2>/dev/null",
+        "kdialog --getopenfilename . "
+            "'WAV / IQ files (*.wav *.WAV)|All files (*)' 2>/dev/null",
+    };
+#endif
     for (const char* cmd : cmds)
     {
         FILE* p = popen(cmd, "r");
@@ -121,9 +140,19 @@ int main(int, char**)
     if (!glfwInit())
         return 1;
 
+#if defined(__APPLE__)
+    // macOS requires a 3.2+ core-profile context (no legacy GL 3.0),
+    // which pairs with a #version 150 GLSL shader.
+    const char* glsl_version = "#version 150";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#else
     const char* glsl_version = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+#endif
 
     GLFWwindow* window = glfwCreateWindow(1400, 900, "InmarScope", nullptr, nullptr);
     if (!window)
@@ -177,15 +206,37 @@ int main(int, char**)
     if (app.fontSize < 8)  app.fontSize = 8;
     if (app.fontSize > 24) app.fontSize = 24;
     {
-        const char* fontPaths[] = {
+#if defined(__APPLE__)
+        // In the .app bundle the font lives in Contents/Resources/fonts/.
+        // Resolve the bundle-relative path from the executable location.
+        std::string exeDir = ".";
+        {
+            char buf[PATH_MAX] = "";
+            uint32_t sz = (uint32_t)sizeof(buf);
+            if (_NSGetExecutablePath(buf, &sz) == 0)
+            {
+                std::string p(buf);
+                std::size_t slash = p.find_last_of('/');
+                if (slash != std::string::npos)
+                    exeDir = p.substr(0, slash);
+            }
+        }
+        const std::string fontPaths[] = {
+            exeDir + "/../Resources/fonts/Roboto-Medium.ttf",
+            exeDir + "/../../third_party/imgui/misc/fonts/Roboto-Medium.ttf",
+            "third_party/imgui/misc/fonts/Roboto-Medium.ttf",
+        };
+#else
+        const std::string fontPaths[] = {
             "third_party/imgui/misc/fonts/Roboto-Medium.ttf",
             "../third_party/imgui/misc/fonts/Roboto-Medium.ttf",
         };
+#endif
         bool loaded = false;
         for (auto& fp : fontPaths)
         {
-            FILE* f = std::fopen(fp, "rb");
-            if (f) { std::fclose(f); loaded = (io.Fonts->AddFontFromFileTTF(fp, (float)app.fontSize) != nullptr); break; }
+            FILE* f = std::fopen(fp.c_str(), "rb");
+            if (f) { std::fclose(f); loaded = (io.Fonts->AddFontFromFileTTF(fp.c_str(), (float)app.fontSize) != nullptr); break; }
         }
         if (!loaded)
             io.Fonts->AddFontDefault(); // fallback to built-in ProggyClean

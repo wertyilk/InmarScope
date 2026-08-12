@@ -107,6 +107,11 @@ void drawControls(App& app)
                 std::string url = app.verCheck.productUrl();
                 if (url.empty()) url = "https://sarahsforge.dev/login";
                 ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(__APPLE__)
+                std::string url = app.verCheck.productUrl();
+                if (url.empty()) url = "https://sarahsforge.dev/login";
+                std::string cmd = "open \"" + url + "\"";
+                std::system(cmd.c_str());
 #endif
             }
         }
@@ -576,6 +581,9 @@ void drawControls(App& app)
         {
 #if defined(_WIN32)
             ShellExecuteA(nullptr, "open", app.bandPlanDir, nullptr, nullptr, SW_SHOW);
+#elif defined(__APPLE__)
+            std::string cmd = "open \"" + std::string(app.bandPlanDir) + "\"";
+            std::system(cmd.c_str());
 #endif
         }
         if (app.bandPlanNames.empty())
@@ -857,6 +865,9 @@ void drawControls(App& app)
             {
 #if defined(_WIN32)
                 ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(__APPLE__)
+                std::string cmd = "open \"" + std::string(url) + "\"";
+                std::system(cmd.c_str());
 #endif
             }
             ImGui::SameLine();

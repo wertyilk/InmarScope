@@ -1,11 +1,13 @@
 # Building InmarScope
 
-InmarScope builds on both **Windows** and **Linux**. Windows is the primary
-target (it also provides the embedded WebView2 Flight Map); Linux builds are
-fully supported minus the WebView2 map, which falls back to a text notice.
+InmarScope builds on **Windows**, **Linux**, and **macOS**. Windows is the
+primary target (it also provides the embedded WebView2 Flight Map); Linux and
+macOS builds are fully supported minus the WebView2 map, which falls back to a
+text notice.
 
 - [Building on Windows](#building-on-windows)
 - [Building on Linux](#building-on-linux)
+- [Building on macOS](#building-on-macos)
 
 # Building on Windows
 
@@ -209,3 +211,68 @@ Run it from the project root (so it finds the bundled font under
 - **RTL-SDR / HackRF permissions.** Install the vendors' udev rules (e.g.
   `/etc/udev/rules.d/`) or run as a user in the `plugdev` group so the device is
   accessible without root.
+```
+
+# Building on macOS
+
+InmarScope builds natively on macOS (Apple Silicon and Intel) with the system
+Clang toolchain (Xcode Command Line Tools), CMake, and Ninja. The build uses the
+same `CMakeLists.txt` as Windows/Linux; the WebView2 Flight Map is Windows-only
+and is skipped — the Flight Map panel is hidden on macOS, matching the Linux
+build. Everything else (decoding, voice, spectrum/waterfall, web dashboard, SBS
+output) works, and the app is packaged as a proper `InmarScope.app` bundle with
+the InmarScope icon and the Roboto font bundled in.
+
+## 1. Install build tools and dependencies
+
+Install the **Xcode Command Line Tools** (provides clang, the macOS SDK, and
+OpenGL):
+
+```bash
+xcode-select --install
+```
+
+Install the dependencies with **Homebrew**:
+
+```bash
+brew install \
+  cmake ninja pkgconf \
+  glfw rtl-sdr hackrf libusb \
+  zstd zlib libogg libvorbis \
+  sqlite3 libxml2 jansson airspy
+```
+
+- `glfw` provides windowing; OpenGL ships with the OS (deprecated since 10.14
+  but fully supported — the build silences the deprecation warnings).
+- `jansson` is optional and linked only when found; the rest are required.
+- Same as elsewhere: Dear ImGui, ImPlot, the JAERO DSP, mbelib, libacars and
+  miniaudio are all vendored in `third_party/` — no submodules.
+
+## 2. Configure and build
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+ninja -C build
+```
+
+The result is a real macOS app bundle:
+
+```
+build/InmarScope.app/Contents/MacOS/InmarScope           # the binary
+build/InmarScope.app/Contents/Resources/InmarScope.icns # app icon (from icon.ico)
+build/InmarScope.app/Contents/Resources/fonts/          # bundled Roboto font
+```
+
+Run it with `open build/InmarScope.app` or by double-clicking it in Finder.
+
+## Notes / troubleshooting
+
+- **First build is slow (~1 min on `implot_items.cpp`).** Same template-heavy
+  file as everywhere; CMakeLists.txt already caps it at `-O1`.
+- **No Flight Map.** Expected — WebView2 is Windows-only, so the Flight Map tab
+  is hidden on macOS.
+- **Unsigned bundle.** A local build is ad-hoc unsigned, so it runs fine on the
+  machine that built it (and after `codesign --force --deep --sign -` for CI
+  artifacts). For public distribution you'd properly sign and notarize it.
+- **RTL-SDR / HackRF.** macOS uses libusb directly (installed above); no udev
+  rules, no extra permissions needed for a normal user.

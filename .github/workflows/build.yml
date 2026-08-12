@@ -80,3 +80,34 @@ jobs:
       with:
         name: InmarScope-Linux-x64
         path: build/InmarScope
+
+  build-macos:
+    name: Build macOS (Arm64)
+    runs-on: macos-15
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        brew install \
+          cmake ninja pkgconf \
+          glfw rtl-sdr hackrf libusb \
+          zstd zlib libogg libvorbis \
+          sqlite3 libxml2 jansson airspy
+
+    - name: Configure and Build
+      run: |
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        ninja -C build
+
+    - name: Ad-hoc sign (local launch friendliness)
+      run: |
+        codesign --force --deep --sign - build/InmarScope.app
+
+    - name: Upload macOS Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: InmarScope-macOS-arm64
+        path: build/InmarScope.app

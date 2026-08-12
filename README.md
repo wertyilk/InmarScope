@@ -1,6 +1,6 @@
 # InmarScope
 
-Multi-protocol L-band satellite communications decoder for Windows (and Linux if you compile it).
+Multi-protocol L-band satellite communications decoder for Windows, macOS, and Linux.
 
 Decodes Inmarsat Aero (Classic Aero, Aero-H/H+) and Inmarsat-C/EGC signals in real time using RTL-SDR, HackRF, or SDR++ server sources. Voice call recording, aircraft tracking, and message output in one application.
 
@@ -24,7 +24,7 @@ Windows builds can be found on official project page: **https://sarahsforge.dev/
 
 ## Building
 
-InmarScope supports building for Windows (MSYS2 MINGW64) and Linux (Debian/Ubuntu, Arch, Fedora).
+InmarScope supports building for Windows (MSYS2 MINGW64), Linux (Debian/Ubuntu, Arch, Fedora), and macOS (Apple Silicon / Intel, Homebrew).
 
 View build instructions at **[COMPILE.md](COMPILE.md)**.
 

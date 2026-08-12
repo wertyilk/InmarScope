@@ -6,11 +6,7 @@
 
 #include <complex>
 #include <cmath>
-#include <cstdint>
-#include <cassert>
-#include <map>
-#include <memory>
-#include <mutex>
+#include <assert.h>
 #include <vector>
 
 #ifdef QT_CORE_LIB
@@ -157,18 +153,12 @@ private:
     int nfft_2power=0;
     int nfft=0;
 
-    //memory — shared across instances with the same nfft via a static pool
-    using Vcpx = std::shared_ptr<std::vector<cpx_type>>;
-    Vcpx DIDDLE_A;
-    Vcpx DIDDLE_B;
-    Vcpx TWIDDLE_mem;
-    Vcpx TWIDDLE_INV_mem;
+    //memory
+    std::vector<cpx_type> DIDDLE_A;
+    std::vector<cpx_type> DIDDLE_B;
+    std::vector<cpx_type> TWIDDLE_mem;
+    std::vector<cpx_type> TWIDDLE_INV_mem;
     std::vector<cpx_type> F;//used if the slow DFT is done or real FFT/iFFT
-
-    // Static pool: one set of tables per nfft size
-    struct TableSet { Vcpx tw, twInv, da, db; };
-    static std::map<int, TableSet> s_pool;
-    static std::mutex s_poolMtx;
 
     void inline swap(cpx_type &a,cpx_type &b){cpx_type c_tmp=b;b=a;a=c_tmp;}
 

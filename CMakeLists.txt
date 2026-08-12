@@ -195,7 +195,10 @@ find_library(ZSTD_LIBRARIES NAMES zstd libzstd REQUIRED)
 find_library(ZLIB_LIB NAMES z libz zlib REQUIRED)
 find_library(SQLITE3_LIB NAMES sqlite3 libsqlite3 REQUIRED)
 find_library(XML2_LIB NAMES xml2 libxml2 REQUIRED)
-find_library(JANSSON_LIB NAMES jansson libjansson REQUIRED)
+# jansson is linked for legacy reasons but not actually used by any source;
+# keep it optional so builds don't hard-fail when it's missing (e.g. macOS
+# without a brew install).
+find_library(JANSSON_LIB NAMES jansson libjansson)
 
 # libogg + libvorbis for OGG Vorbis voice recording.
 if(PkgConfig_FOUND)
@@ -209,9 +212,72 @@ if(NOT OGG_FOUND OR NOT VORBIS_FOUND)
     find_library(VORBISENC_LIBRARIES NAMES vorbisenc libvorbisenc REQUIRED)
 endif()
 
-target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${SQLITE3_LIB} ${XML2_LIB} ${JANSSON_LIB})
+target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${SQLITE3_LIB} ${XML2_LIB})
+if(JANSSON_LIB)
+    target_link_libraries(InmarScope PRIVATE ${JANSSON_LIB})
+endif()
 if(WIN32)
     target_link_libraries(InmarScope PRIVATE ${WEBVIEW2_LIB})
+endif()
+
+# ---------------------------------------------------------------------------
+# macOS: silent deprecation warnings, app bundle, icon + bundled font
+# ---------------------------------------------------------------------------
+if(APPLE)
+    # OpenGL is deprecated on macOS since 10.14 but still fully supported;
+    # silence the noise while keeping the pipeline identical to Linux/Windows.
+    target_compile_definitions(InmarScope PRIVATE GL_SILENCE_DEPRECATION)
+
+    # Generate InmarScope.icns from the Windows icon.ico (sips + iconutil ship
+    # with macOS; sips can read .ico). Falls back to an icon-less bundle if the
+    # conversion fails for any reason.
+    set(IMSC_ICONSET ${CMAKE_BINARY_DIR}/InmarScope.iconset)
+    set(IMSC_ICNS   ${CMAKE_BINARY_DIR}/InmarScope.icns)
+    file(MAKE_DIRECTORY ${IMSC_ICONSET})
+    set(IMSC_ICON_SIZES
+        "\"16 icon_16x16.png\""
+        "\"32 icon_16x16@2x.png\""
+        "\"32 icon_32x32.png\""
+        "\"64 icon_32x32@2x.png\""
+        "\"128 icon_128x128.png\""
+        "\"256 icon_128x128@2x.png\""
+        "\"256 icon_256x256.png\""
+        "\"512 icon_256x256@2x.png\""
+        "\"512 icon_512x512.png\""
+        "\"1024 icon_512x512@2x.png\"")
+    string(JOIN " " IMSC_ICON_SPECS ${IMSC_ICON_SIZES})
+    execute_process(COMMAND bash -c "
+        set -e
+        iconset='${IMSC_ICONSET}'
+        base=\"\$iconset/base.png\"
+        sips -s format png '${CMAKE_SOURCE_DIR}/icon.ico' --out \"\$base\" >/dev/null
+        for spec in ${IMSC_ICON_SPECS}; do
+            sz=\"\${spec%% *}\"
+            name=\"\${spec#* }\"
+            sips -z \"\$sz\" \"\$sz\" \"\$base\" --out \"\$iconset/\$name\" >/dev/null
+        done
+        iconutil -c icns \"\$iconset\" -o '${IMSC_ICNS}'
+    " RESULT_VARIABLE IMSC_ICONUTIL_RC)
+
+    set_target_properties(InmarScope PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "InmarScope"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "dev.sarahsforge.inmarscope"
+        MACOSX_BUNDLE_EXECUTABLE_NAME "InmarScope"
+        MACOSX_BUNDLE_ICON_FILE "InmarScope.icns"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.17"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.17"
+    )
+
+    # Bundle the generated icon and the Roboto font into Contents/Resources
+    # so the app finds its font regardless of the launch working directory.
+    set_source_files_properties(${IMSC_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/third_party/imgui/misc/fonts/Roboto-Medium.ttf
+        PROPERTIES MACOSX_PACKAGE_LOCATION Resources/fonts)
+    if(EXISTS ${IMSC_ICNS})
+        target_sources(InmarScope PRIVATE ${IMSC_ICNS})
+    endif()
+    target_sources(InmarScope PRIVATE ${CMAKE_SOURCE_DIR}/third_party/imgui/misc/fonts/Roboto-Medium.ttf)
 endif()
 find_package(Threads REQUIRED)
 target_link_libraries(InmarScope PRIVATE Threads::Threads)
