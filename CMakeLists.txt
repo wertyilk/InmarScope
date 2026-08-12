@@ -210,6 +210,18 @@ if(NOT OGG_FOUND OR NOT VORBIS_FOUND)
     find_library(OGG_LIBRARIES NAMES ogg libogg REQUIRED)
     find_library(VORBIS_LIBRARIES NAMES vorbis libvorbis REQUIRED)
     find_library(VORBISENC_LIBRARIES NAMES vorbisenc libvorbisenc REQUIRED)
+else()
+    # pkg-config found them, but they might be in non-standard paths (e.g. Homebrew
+    # keg-only on macOS). Add the library directories so the linker can find them.
+    if(OGG_LIBRARY_DIRS)
+        target_link_directories(InmarScope PRIVATE ${OGG_LIBRARY_DIRS})
+    endif()
+    if(VORBIS_LIBRARY_DIRS)
+        target_link_directories(InmarScope PRIVATE ${VORBIS_LIBRARY_DIRS})
+    endif()
+    if(VORBISENC_LIBRARY_DIRS)
+        target_link_directories(InmarScope PRIVATE ${VORBISENC_LIBRARY_DIRS})
+    endif()
 endif()
 
 target_link_libraries(InmarScope PRIVATE imgui jaero_dsp mbelib acars_static ${ZLIB_LIB} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES} ${ZSTD_LIBRARIES} ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES} ${SQLITE3_LIB} ${XML2_LIB})
