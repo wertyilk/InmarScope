@@ -413,6 +413,16 @@ static void pmsk_acars_adapter(ACARSItem &acarsitem, void *ctx)
     }
 }
 
+/* AeroL frame-sync DCD → demod. Matches JAERO's AeroL::DCD Qt connection;
+ * without it the demod never leaves acquisition mode (jittery timing loop,
+ * aggressive carrier gain) and the AFC never re-centers mixer_center. */
+static void pmsk_dcd_adapter(bool status, void *ctx)
+{
+    jaero_pmsk_demod_t *d = (jaero_pmsk_demod_t *)ctx;
+    if (d->demod)
+        d->demod->DCDstatSlot(status);
+}
+
 static void pmsk_sigstat_adapter(bool signal_good, void *ctx)
 {
     jaero_pmsk_demod_t *d = (jaero_pmsk_demod_t *)ctx;
@@ -459,6 +469,7 @@ jaero_pmsk_demod_t *jaero_pmsk_create(double sample_rate, double symbol_rate,
     d->demod->setSettings(s);
     d->demod->setSoftBitsCallback(pmsk_bits_adapter, d);
     d->demod->setSignalStatusCallback(pmsk_sigstat_adapter, d);
+    d->aerol->setDCDCallback(pmsk_dcd_adapter, d);
     d->demod->setAFC(true);  /* on by default in JAERO GUI */
     d->afc_on = true;
     d->lockingbw = s.lockingbw;
@@ -696,6 +707,17 @@ static void oqpsk_cont_sigstat_adapter(bool signal_good, void *ctx)
         d->aerol->LostSignal();
 }
 
+/* AeroL frame-sync DCD → demod. Matches JAERO's AeroL::DCD Qt connection;
+ * without it the "prevent bad stable states" branch in
+ * FreqOffsetEstimateSlot keeps snapping mixer2 to the ±3 Hz coarse
+ * estimate even while locked. */
+static void oqpsk_cont_dcd_adapter(bool status, void *ctx)
+{
+    jaero_oqpsk_cont_demod_t *d = (jaero_oqpsk_cont_demod_t *)ctx;
+    if (d->demod)
+        d->demod->DCDstatSlot(status);
+}
+
 jaero_oqpsk_cont_demod_t *jaero_oqpsk_cont_create(double sample_rate, double symbol_rate,
                                                     int channel_id,
                                                     jaero_soft_bits_cb cb, void *user)
@@ -743,6 +765,7 @@ jaero_oqpsk_cont_demod_t *jaero_oqpsk_cont_create(double sample_rate, double sym
     d->demod->setSettings(s);
     d->demod->setSoftBitsCallback(oqpsk_cont_bits_adapter, d);
     d->demod->setSignalStatusCallback(oqpsk_cont_sigstat_adapter, d);
+    d->aerol->setDCDCallback(oqpsk_cont_dcd_adapter, d);
     d->demod->setAFC(true);  /* on by default in JAERO GUI */
     d->afc_on = true;
     d->lockingbw = s.lockingbw;

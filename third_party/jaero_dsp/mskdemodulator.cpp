@@ -13,6 +13,7 @@
 #include "coarsefreqestimate.h"
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -144,50 +145,33 @@ void MskDemodulator::setSettings(Settings s)
     pointbuff.assign(100, cpx_type(0, 0));
     pointbuff_ptr = 0;
     mse = 10.0;
+    trackmode = false;
 
     lastindex = 0;
 
     st_iir_resonator.a.resize(3);
     st_iir_resonator.b.resize(3);
 
-    if (fb >= 1200) {
-        correctionfactor = 0.6;
-        if (Fs == 48000) {
-            st_iir_resonator.a[0] = 1;
-            st_iir_resonator.a[1] = -1.993312819378528;
-            st_iir_resonator.a[2] = 0.999476538254407;
-            st_iir_resonator.b[0] = 2.617308727964618e-04;
-            st_iir_resonator.b[1] = 0;
-            st_iir_resonator.b[2] = -2.617308727964618e-04;
-            ee = 0.025;
-        } else {
-            st_iir_resonator.a[0] = 1;
-            st_iir_resonator.a[1] = -1.974342917561558;
-            st_iir_resonator.a[2] = 0.998953350377616;
-            st_iir_resonator.b[0] = 5.233248111921052e-04;
-            st_iir_resonator.b[1] = 0;
-            st_iir_resonator.b[2] = -5.233248111921052e-04;
-            ee = 0.05;
-        }
-    } else {
-        correctionfactor = 1.0;
-        if (Fs == 48000) {
-            st_iir_resonator.a[0] = 1;
-            st_iir_resonator.a[1] = -1.998196509168551;
-            st_iir_resonator.a[2] = 0.999738234875681;
-            st_iir_resonator.b[0] = 1.308825621597620e-04;
-            st_iir_resonator.b[1] = 0;
-            st_iir_resonator.b[2] = -1.308825621597620e-04;
-            ee = 0.025;
-        } else {
-            st_iir_resonator.a[0] = 1;
-            st_iir_resonator.a[1] = -1.974342917561558;
-            st_iir_resonator.a[2] = 0.998953350377616;
-            st_iir_resonator.b[0] = 5.233248111921052e-04;
-            st_iir_resonator.b[1] = 0;
-            st_iir_resonator.b[2] = -5.233248111921052e-04;
-            ee = 0.0125;
-        }
+    /* Symbol timing resonator, designed for the ACTUAL sample rate.
+     * JAERO baked coefficient tables for Fs of exactly 48000 (and a 12 kHz
+     * fallback); our DDC delivers e.g. 48761.9 Hz (2.048 MHz / 42), which
+     * silently selected the 12 kHz table and put the resonator at ~1218 Hz
+     * instead of the fb/2 timing tone — the timing error signal was a
+     * phase-shifted harmonic. Generic design: poles at radius r, angle
+     * 2*pi*(fb/2)/Fs; bandwidth (1-r)*Fs/pi matches JAERO's intended
+     * 2 Hz (600 baud) / 4 Hz (1200 baud); b0 = (1-r^2)/2 (peak gain ~1). */
+    correctionfactor = (fb >= 1200) ? 0.6 : 1.0;
+    ee = 0.025;
+    {
+        double bw_hz = (fb >= 1200) ? 4.0 : 2.0;
+        double r = 1.0 - (M_PI * bw_hz / Fs);
+        double th = 2.0 * M_PI * (fb / 2.0) / Fs;
+        st_iir_resonator.a[0] = 1.0;
+        st_iir_resonator.a[1] = -2.0 * r * std::cos(th);
+        st_iir_resonator.a[2] = r * r;
+        st_iir_resonator.b[0] = (1.0 - r * r) / 2.0;
+        st_iir_resonator.b[1] = 0;
+        st_iir_resonator.b[2] = -(1.0 - r * r) / 2.0;
     }
     st_iir_resonator.init();
 
@@ -197,6 +181,39 @@ void MskDemodulator::setSettings(Settings s)
     delayedsmpl.setLength(SamplesPerSymbol);
     delayt8.setdelay(SamplesPerSymbol / 2.0);
     coarseCounter = 0;
+
+    /* Carrier tracking loop design (satdump costas_loop.cpp formula).
+     * JAERO's original P+I pair (12deg / 0.12 Hz per update) has an
+     * integrator ~35x too weak for its proportional gain (zeta ~2.1):
+     * with a drifting SDR LO the loop limit-cycles between phase slips
+     * instead of settling. A designed pair with zeta=1/sqrt(2) tracks a
+     * ~1 Hz/s warmup ramp with sub-millirad steady-state error.
+     * Bandwidths in Hz of loop noise bandwidth at the symbol-decision
+     * update rate (fb/2): wide for acquisition pull-in from the coarse
+     * estimate, narrow for tracking jitter. */
+    carrier_upd_rate = fb / 2.0;
+    auto design_loop = [&](double bn_hz, double &alpha, double &beta) {
+        double damping = std::sqrt(2.0) / 2.0;
+        double w = 2.0 * M_PI * bn_hz / carrier_upd_rate;
+        double denom = 1.0 + 2.0 * damping * w + w * w;
+        alpha = (4.0 * damping * w) / denom;
+        beta = (4.0 * w * w) / denom;
+    };
+    /* Defaults benchmarked on real captures (see DSP_PLL_NOTES.md):
+     * 3 Hz acquisition / 1.2 Hz tracking noise bandwidth, timing NCO
+     * frequency-learning gain 3e-5. Env vars are tuning overrides for
+     * headless benchmarks only. */
+    double bn_acq = 3.0, bn_trk = 1.2;
+    if (const char *e = getenv("MSK_BN_ACQ")) bn_acq = atof(e);
+    if (const char *e = getenv("MSK_BN_TRK")) bn_trk = atof(e);
+    design_loop(bn_acq, ct_alpha_acq, ct_beta_acq);
+    design_loop(bn_trk, ct_alpha_trk, ct_beta_trk);
+    st_gain_acq = 0.05;
+    st_gain_trk = 0.003;
+    st_freq_gain = 3e-5;
+    if (const char *e = getenv("MSK_ST_ACQ")) st_gain_acq = atof(e);
+    if (const char *e = getenv("MSK_ST_TRK")) st_gain_trk = atof(e);
+    if (const char *e = getenv("MSK_ST_FREQ")) st_freq_gain = atof(e);
 }
 
 void MskDemodulator::invalidatesettings() { Fs = -1; fb = -1; }
@@ -251,6 +268,11 @@ void MskDemodulator::setSoftBitsCallback(msk_soft_bits_cb cb, void *user)
 {
     soft_bits_cb = cb;
     soft_bits_user = user;
+}
+
+void MskDemodulator::DCDstatSlot(bool _dcd)
+{
+    dcd = _dcd;
 }
 
 void MskDemodulator::CenterFreqChangedSlot(double f)
@@ -350,10 +372,32 @@ void MskDemodulator::processAudio(const short *ptr, int numofsamples)
         double st_angle_error = std::arg(st_out);
         double weighting = fabs(tanh(st_angle_error));
 
-        if (!dcd)
-            st_osc.AdvanceFractionOfWave(-(1.0 - weighting) * st_angle_error * (0.05 / 360.0));
+        /* Acquisition/tracking gain scheduling. JAERO switches on AeroL's
+         * DCD, but frame sync often arrives while the constellation is
+         * still poor (AeroL correlates soft bits, tolerating high MSE) —
+         * dropping the gains 17x at that point makes convergence crawl for
+         * tens of seconds. Gate on measured constellation quality instead,
+         * with hysteresis so the switch doesn't chatter around the
+         * threshold. (satdump avoids this trap by running one designed
+         * loop; here we keep JAERO's two-mode structure but fix the gate.) */
+        if (mse < 0.8 * signalthreshold) trackmode = true;
+        else if (mse > 1.2 * signalthreshold) trackmode = false;
+
+        if (!trackmode)
+            st_osc.AdvanceFractionOfWave(-(1.0 - weighting) * st_angle_error * (st_gain_acq / 360.0));
         else
-            st_osc.AdvanceFractionOfWave(-(1.0 - weighting) * st_angle_error * (0.003 / 360.0));
+            st_osc.AdvanceFractionOfWave(-(1.0 - weighting) * st_angle_error * (st_gain_trk / 360.0));
+
+        /* Timing NCO frequency adaptation (satdump M&M omega-gain
+         * equivalent). JAERO had none: with a typical RTL-SDR crystal
+         * ~25 ppm off, the true symbol clock in receiver samples is
+         * ~0.01 Hz away from nominal, and phase nudges alone can't hold
+         * it — the eye slowly closes and re-acquires in a limit cycle.
+         * Learn the offset into the NCO frequency, clamped to +-0.1 Hz
+         * of nominal so noise can't walk it away. */
+        st_osc.IncreseFreqHz(-(1.0 - weighting) * st_angle_error * st_freq_gain);
+        if (st_osc.GetFreqHz() < fb / 2.0 - 0.1) st_osc.SetFreq(fb / 2.0 - 0.1);
+        if (st_osc.GetFreqHz() > fb / 2.0 + 0.1) st_osc.SetFreq(fb / 2.0 + 0.1);
 
         if (st_osc.IfHavePassedPoint(ee)) {
             double ct_xt = tanh(sig2.imag()) * sig2.real();
@@ -365,10 +409,22 @@ void MskDemodulator::processAudio(const short *ptr, int numofsamples)
             if (ct_ec > M_PI_2) ct_ec = M_PI_2;
             if (ct_ec < -M_PI_2) ct_ec = -M_PI_2;
 
-            double carrier_aggression = 12.0 * correctionfactor;
-            if (dcd) carrier_aggression = 8.0 * correctionfactor;
-            mixer2.IncresePhaseDeg(carrier_aggression * 1.0 * ct_ec);
-            mixer2.IncreseFreqHz(carrier_aggression * 0.01 * ct_ec);
+            /* Designed 2nd-order PI carrier loop (see setSettings). alpha is
+             * rad/rad; beta is rad/update^2, converted to Hz per update. */
+            double ct_alpha = trackmode ? ct_alpha_trk : ct_alpha_acq;
+            double ct_beta = trackmode ? ct_beta_trk : ct_beta_acq;
+            mixer2.IncresePhaseDeg((180.0 / M_PI) * ct_alpha * ct_ec);
+            mixer2.IncreseFreqHz((carrier_upd_rate / (2.0 * M_PI)) * ct_beta * ct_ec);
+
+            /* Hard clamp mixer2 to the AFC capture range (satdump costas
+             * freq_limit equivalent): the fine loop must not wander onto an
+             * adjacent channel between coarse-estimator updates. */
+            {
+                double lo = mixer_center.GetFreqHz() - lockingbw / 2.0;
+                double hi = mixer_center.GetFreqHz() + lockingbw / 2.0;
+                if (mixer2.GetFreqHz() < lo) mixer2.SetFreq(lo);
+                if (mixer2.GetFreqHz() > hi) mixer2.SetFreq(hi);
+            }
 
             marg->UpdateSigned(ct_ec / 2.0);
             dt.update(pt_msk);

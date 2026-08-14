@@ -83,6 +83,11 @@ public:
     double getFreqCenterHz() const { return freq_center; }
     void setManualTune(double audio_hz);
 
+    /* AeroL frame-sync DCD. In JAERO this is a Qt connection from AeroL's
+     * DCD signal; here jaero_demod.cpp forwards it via setDCDCallback.
+     * Gates carrier/timing loop gain (search vs track) and AFC re-centering. */
+    void DCDstatSlot(bool _dcd);
+
 private:
     msk_soft_bits_cb soft_bits_cb;
     void *soft_bits_user;
@@ -162,6 +167,19 @@ private:
     Delay<double> delayt8;
 
     bool dcd;
+    /* MSE-gated acquisition/tracking mode with hysteresis (see processAudio). */
+    bool trackmode = false;
+    /* Carrier loop PI gains (rad/rad and rad/update^2), designed in
+     * setSettings() from a loop noise bandwidth in Hz — satdump-style
+     * 2nd-order loop with damping 1/sqrt(2). Two sets: acquisition and
+     * tracking, selected by trackmode. */
+    double ct_alpha_acq = 0, ct_beta_acq = 0;
+    double ct_alpha_trk = 0, ct_beta_trk = 0;
+    double carrier_upd_rate = 300.0; /* symbol-decision rate = fb/2 */
+    /* Symbol timing loop gains (acquisition / tracking) + NCO frequency
+     * adaptation gain (learns sample-clock ppm offset). */
+    double st_gain_acq = 0.05, st_gain_trk = 0.003;
+    double st_freq_gain = 2e-6;
 
     double correctionfactor;
 

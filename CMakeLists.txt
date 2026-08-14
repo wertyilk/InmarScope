@@ -230,6 +230,54 @@ if(WIN32)
 endif()
 
 # ---------------------------------------------------------------------------
+# Headless test tools (opt-in): decode_bench runs the real Decoder against a
+# baseband WAV capture and prints per-channel lock/EbNo/message metrics, for
+# A/B verification of DSP changes.
+# ---------------------------------------------------------------------------
+option(INMARSCOPE_BUILD_TOOLS "Build headless decode test tools" OFF)
+if(INMARSCOPE_BUILD_TOOLS)
+    add_executable(decode_bench
+        tools/decode_bench.cpp
+        src/decode/decoder.cpp
+        src/decode/egc/egc_decoder.cpp
+        src/decode/acars_apps.cpp
+        src/decode/icao_country.cpp
+        src/util/log.cpp
+        src/voice/ambe_decoder.cpp
+        src/voice/wav_writer.cpp
+        src/audio/audio_output.cpp
+        src/audio/miniaudio_impl.cpp
+        src/store/message_store.cpp
+    )
+    target_include_directories(decode_bench PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/third_party/mbelib
+        ${CMAKE_SOURCE_DIR}/third_party/miniaudio
+        ${CMAKE_SOURCE_DIR}/third_party/libacars
+        ${OGG_INCLUDE_DIRS}
+        ${VORBIS_INCLUDE_DIRS}
+        ${VORBISENC_INCLUDE_DIRS}
+    )
+    target_compile_definitions(decode_bench PRIVATE _USE_MATH_DEFINES)
+    if(OGG_LIBRARY_DIRS)
+        target_link_directories(decode_bench PRIVATE ${OGG_LIBRARY_DIRS})
+    endif()
+    if(VORBIS_LIBRARY_DIRS)
+        target_link_directories(decode_bench PRIVATE ${VORBIS_LIBRARY_DIRS})
+    endif()
+    if(VORBISENC_LIBRARY_DIRS)
+        target_link_directories(decode_bench PRIVATE ${VORBISENC_LIBRARY_DIRS})
+    endif()
+    target_link_libraries(decode_bench PRIVATE jaero_dsp mbelib acars_static
+        ${ZLIB_LIB} ${SQLITE3_LIB} ${XML2_LIB} ${JANSSON_LIBRARIES}
+        ${OGG_LIBRARIES} ${VORBIS_LIBRARIES} ${VORBISENC_LIBRARIES}
+        ${ZSTD_LIBRARIES} Threads::Threads)
+
+    add_executable(twostage_test tools/twostage_test.cpp)
+    target_include_directories(twostage_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+endif()
+
+# ---------------------------------------------------------------------------
 # macOS: silent deprecation warnings, app bundle, icon + bundled font
 # ---------------------------------------------------------------------------
 if(APPLE)

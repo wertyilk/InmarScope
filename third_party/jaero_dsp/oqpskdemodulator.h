@@ -90,6 +90,11 @@ public:
      * the new mixer_center frequency in audio Hz. AFC continues from there. */
     void setManualTune(double audio_hz);
 
+    /* AeroL frame-sync DCD. In JAERO this is a Qt connection from AeroL's
+     * DCD signal; here jaero_demod.cpp forwards it via setDCDCallback.
+     * Gates the coarse↔fine handoff and the AFC re-centering. */
+    void DCDstatSlot(bool _dcd);
+
 private:
     oqpsk_soft_bits_cb soft_bits_cb;
     void *soft_bits_user;
@@ -99,7 +104,6 @@ private:
 
     /* Internal slot equivalents (called directly, not via Qt). */
     void FreqOffsetEstimateSlot(double freq_offset_est);
-    void DCDstatSlot(bool _dcd);
     void processAudio(const short *data, int num_samples);
 
     bool afc;

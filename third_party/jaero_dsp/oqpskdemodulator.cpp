@@ -257,24 +257,27 @@ void OqpskDemodulator::setSettings(Settings s)
     st_iir_resonator.a.resize(3);
     st_iir_resonator.b.resize(3);
 
-    if (fb == 8400.0) {
-        /* 10 Hz bw resonator for 8400 bps */
-        st_iir_resonator.b[0] =  0.0012845857864470789;
-        st_iir_resonator.b[1] =  0.0;
-        st_iir_resonator.b[2] = -0.0012845857864470789;
-        st_iir_resonator.a[0] =  1.0;
-        st_iir_resonator.a[1] = -0.90681461999279889;
-        st_iir_resonator.a[2] =  0.99743082842710584;
-        ee = 0.65;
-    } else {
-        st_iir_resonator.b[0] =  0.00032714218939589035;
-        st_iir_resonator.b[1] =  0.0;
-        st_iir_resonator.b[2] =  0.00032714218939589035;
-        st_iir_resonator.a[0] =  1.0;
-        st_iir_resonator.a[1] = -0.39005299948210803;
-        st_iir_resonator.a[2] =  0.99934571562120822;
-        ee = 0.4;
+    /* Symbol timing resonator at the fb tone, designed for the ACTUAL
+     * sample rate. JAERO's baked tables assume Fs of exactly 48000; our
+     * DDC delivers e.g. 48761.9 Hz, which put the resonator ~130-170 Hz
+     * off the timing tone (outside its own bandwidth) — timing then ran
+     * on a phase-shifted attenuated skirt. Pole radius from JAERO's
+     * intended bandwidths (19.6 Hz @ 8400, 5.0 Hz @ 10500 at 48 kHz);
+     * b0 = (1-r^2)/2 reproduces JAERO's 48 kHz tables exactly. The b[2]
+     * sign per baud also matches the original tables. */
+    {
+        double st_bw = (fb == 8400.0) ? 19.6 : 5.0;
+        double r = 1.0 - (M_PI * st_bw / Fs);
+        double th = 2.0 * M_PI * fb / Fs;
+        double b0 = (1.0 - r * r) / 2.0;
+        st_iir_resonator.a[0] = 1.0;
+        st_iir_resonator.a[1] = -2.0 * r * std::cos(th);
+        st_iir_resonator.a[2] = r * r;
+        st_iir_resonator.b[0] = b0;
+        st_iir_resonator.b[1] = 0.0;
+        st_iir_resonator.b[2] = (fb == 8400.0) ? -b0 : b0;
     }
+    ee = (fb == 8400.0) ? 0.65 : 0.4;
     st_iir_resonator.init();
 
     st_osc.SetFreq(fb, Fs);
@@ -480,6 +483,17 @@ void OqpskDemodulator::processAudio(const short *data, int num_samples)
                 } else {
                     mixer2.IncresePhaseDeg(1.0 * ct_ec);
                     mixer2.IncreseFreqHz(0.5 * 0.01 * ct_iir_loopfilter.update(ct_ec));
+                }
+
+                /* Hard clamp the fine loop to the AFC capture range
+                 * (satdump costas freq_limit equivalent) so it can't
+                 * wander onto an adjacent channel between coarse
+                 * estimator updates. */
+                {
+                    double lo = mixer_center.GetFreqHz() - lockingbw / 2.0;
+                    double hi = mixer_center.GetFreqHz() + lockingbw / 2.0;
+                    if (mixer2.GetFreqHz() < lo) mixer2.SetFreq(lo);
+                    if (mixer2.GetFreqHz() > hi) mixer2.SetFreq(hi);
                 }
 
                 /* Rotate to remove any remaining bias */
